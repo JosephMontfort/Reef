@@ -314,11 +314,11 @@ class FocusModeService : Service() {
                 setChronometerCountDown(true)
                 setWhen(System.currentTimeMillis() + timeLeft)
                 // Content text is a fallback for older launchers that don't render chronometers
-                setContentText(getString(R.string.time_remaining, formatTime(timeLeft)))
+                setContentText(getString(R.string.time_remaining, "${TimeUnit.MILLISECONDS.toMinutes(timeLeft)} m"))
             } else {
                 setUsesChronometer(false)
                 setWhen(System.currentTimeMillis())
-                setContentText(getString(R.string.paused_time, formatTime(timeLeft)))
+                setContentText(getString(R.string.paused_time, "${TimeUnit.MILLISECONDS.toMinutes(timeLeft)} m"))
             }
 
             // Dynamic-island / promoted chip: show remaining minutes
