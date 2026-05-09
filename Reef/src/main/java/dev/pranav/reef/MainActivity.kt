@@ -55,7 +55,6 @@ import dev.pranav.reef.ui.focusstats.FocusStatsScreen
 import dev.pranav.reef.util.*
 
 class MainActivity: ComponentActivity() {
-    private var pendingFocusModeStart = false
     private var hasCheckedPermissions = false
     private var shouldNavigateToTimer = false
 
@@ -309,10 +308,7 @@ class MainActivity: ComponentActivity() {
                                         )
                                     )
                                 },
-                                onRequestAccessibility = {
-                                    pendingFocusModeStart = true
-                                    showAccessibilityDialog()
-                                },
+                                onRequestAccessibility = { /* accessibility no longer required for focus mode */ },
                                 currentTimeLeft = currentTimeLeft,
                                 currentTimerState = currentTimerState,
                                 whitelistedAppsCount = whitelistedCount,
@@ -542,9 +538,6 @@ class MainActivity: ComponentActivity() {
         if (!hasCheckedPermissions && !prefs.getBoolean("first_run", true)) {
             hasCheckedPermissions = true
             checkAndRequestMissingPermissions()
-        }
-        if (pendingFocusModeStart && isAccessibilityServiceEnabledForBlocker()) {
-            pendingFocusModeStart = false
         }
     }
 

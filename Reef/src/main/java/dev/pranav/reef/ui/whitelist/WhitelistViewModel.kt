@@ -1,5 +1,6 @@
 package dev.pranav.reef.ui.whitelist
 
+import android.content.pm.ApplicationInfo
 import android.content.pm.LauncherApps
 import android.content.pm.PackageManager
 import android.os.Build
@@ -17,13 +18,16 @@ class WhitelistViewModel(
     private val launcherApps: LauncherApps,
     private val packageManager: PackageManager,
     private val currentPackageName: String
-): ViewModel() {
+) : ViewModel() {
 
     private val _uiState = mutableStateOf<AllowedAppsState>(AllowedAppsState.Loading)
     private var allApps = listOf<WhitelistedApp>()
 
     private val _searchQuery = mutableStateOf("")
     val searchQuery: State<String> = _searchQuery
+
+    private val _hideSystemApps = mutableStateOf(false)
+    val hideSystemApps: State<Boolean> = _hideSystemApps
 
     val uiState: State<AllowedAppsState> = _uiState
 
@@ -38,7 +42,6 @@ class WhitelistViewModel(
                 val allAppsList = mutableListOf<WhitelistedApp>()
 
                 profiles.forEach { userHandle ->
-                    // Fetch apps for the specific profile (Personal, Work, etc.)
                     val launcherActivities = launcherApps.getActivityList(null, userHandle)
                         .distinctBy { it.applicationInfo.packageName }
 
@@ -46,39 +49,27 @@ class WhitelistViewModel(
                         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.VANILLA_ICE_CREAM) {
                             launcherApps.getPreInstalledSystemPackages(userHandle)
                                 .mapNotNull { pkg ->
-                                    runCatching {
-                                        packageManager.getApplicationInfo(
-                                            pkg,
-                                            0
-                                        )
-                                    }.getOrNull()
+                                    runCatching { packageManager.getApplicationInfo(pkg, 0) }.getOrNull()
                                 }
-                        } else {
-                            emptyList()
+                        } else emptyList()
+
+                    val combined = (launcherActivities.map { it.applicationInfo } + profileSystemApps)
+                        .distinctBy { it.packageName }
+                        .filter { it.packageName != currentPackageName }
+                        .map { appInfo ->
+                            val originalIcon = appInfo.loadIcon(packageManager)
+                            val badgedIcon = packageManager.getUserBadgedIcon(originalIcon, userHandle)
+                            WhitelistedApp(
+                                packageName = appInfo.packageName,
+                                label       = appInfo.loadLabel(packageManager).toString(),
+                                icon        = badgedIcon.toBitmap().asImageBitmap(),
+                                isWhitelisted = Whitelist.isWhitelisted(appInfo.packageName),
+                                isSystemApp = (appInfo.flags and ApplicationInfo.FLAG_SYSTEM) != 0,
+                                user        = userHandle
+                            )
                         }
-
-                    val combined =
-                        (launcherActivities.map { it.applicationInfo } + profileSystemApps)
-                            .distinctBy { it.packageName }
-                            .filter { it.packageName != currentPackageName }
-                            .map { appInfo ->
-                                val originalIcon = appInfo.loadIcon(packageManager)
-
-                                // Wrap icon with the "Work Badge" if it belongs to a managed profile
-                                val badgedIcon =
-                                    packageManager.getUserBadgedIcon(originalIcon, userHandle)
-
-                                WhitelistedApp(
-                                    packageName = appInfo.packageName,
-                                    label = appInfo.loadLabel(packageManager).toString(),
-                                    icon = badgedIcon.toBitmap().asImageBitmap(),
-                                    isWhitelisted = Whitelist.isWhitelisted(appInfo.packageName),
-                                    user = userHandle
-                                )
-                            }
                     allAppsList.addAll(combined)
                 }
-                // Sort by label; keep duplicates if they belong to different users
                 allAppsList.sortedBy { it.label }
             }
             allApps = apps
@@ -91,16 +82,21 @@ class WhitelistViewModel(
         updateFilteredList()
     }
 
+    fun onHideSystemAppsChange(hide: Boolean) {
+        _hideSystemApps.value = hide
+        updateFilteredList()
+    }
+
     private fun updateFilteredList() {
-        val query = _searchQuery.value
-        val filtered = if (query.isEmpty()) {
-            allApps
-        } else {
-            allApps.filter {
-                it.label.contains(query, ignoreCase = true) ||
-                        it.packageName.contains(query, ignoreCase = true)
+        val query  = _searchQuery.value
+        val hideSystem = _hideSystemApps.value
+        val filtered = allApps
+            .filter { app -> !hideSystem || !app.isSystemApp }
+            .filter { app ->
+                query.isEmpty() ||
+                app.label.contains(query, ignoreCase = true) ||
+                app.packageName.contains(query, ignoreCase = true)
             }
-        }
         _uiState.value = AllowedAppsState.Success(filtered)
     }
 
@@ -109,11 +105,8 @@ class WhitelistViewModel(
         else Whitelist.whitelist(app.packageName)
 
         allApps = allApps.map {
-            if (it.packageName == app.packageName && it.user == app.user) {
-                it.copy(isWhitelisted = !it.isWhitelisted)
-            } else {
-                it
-            }
+            if (it.packageName == app.packageName && it.user == app.user) it.copy(isWhitelisted = !it.isWhitelisted)
+            else it
         }
         updateFilteredList()
     }

@@ -8,6 +8,10 @@ data class TimerSessionState(
     val isRunning: Boolean = false,
     val isPaused: Boolean = false,
     val timeRemaining: Long = 0,
+    /** Absolute system-clock epoch (ms) at which the current running phase expires.
+     *  Only valid when [isRunning] == true. Use this to derive the live countdown
+     *  display without requiring per-second state updates. */
+    val endTimeMillis: Long = 0,
     val pomodoroPhase: PomodoroPhase = PomodoroPhase.FOCUS,
     val currentCycle: Int = 0,
     val totalCycles: Int = 4,

@@ -34,7 +34,6 @@ import androidx.core.content.edit
 import androidx.core.net.toUri
 import dev.pranav.reef.timer.TimerStateManager
 import dev.pranav.reef.ui.Typography
-import dev.pranav.reef.util.isAccessibilityServiceEnabledForBlocker
 import dev.pranav.reef.util.prefs
 import kotlinx.coroutines.delay
 import kotlin.math.roundToInt
@@ -130,13 +129,7 @@ fun HomeContent(
 
             FocusModeCard(
                 onSlideProgress = onSlideProgressChange,
-                onClick = {
-                    if (context.isAccessibilityServiceEnabledForBlocker()) {
-                        onNavigateToTimer()
-                    } else {
-                        onRequestAccessibility()
-                    }
-                }
+                onClick = onNavigateToTimer
             )
 
             Spacer(Modifier.height(16.dp))

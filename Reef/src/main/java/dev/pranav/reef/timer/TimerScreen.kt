@@ -31,6 +31,7 @@ import androidx.compose.ui.unit.sp
 import androidx.navigation.NavController
 import androidx.navigation.compose.rememberNavController
 import dev.pranav.reef.R
+import dev.pranav.reef.accessibility.formatTime
 import dev.pranav.reef.navigation.Screen
 import dev.pranav.reef.ui.Typography.DMSerif
 import dev.pranav.reef.util.prefs
@@ -638,7 +639,9 @@ fun ExpressiveCounter(
 @OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 fun RunningTimerView(
-    timeLeft: String,
+    // timeLeft kept for API compatibility; actual display is computed locally from
+    // TimerStateManager.state so the parent doesn't need to tick every second.
+    @Suppress("UNUSED_PARAMETER") timeLeft: String,
     timerState: String,
     isPaused: Boolean,
     isStrictMode: Boolean,
@@ -651,6 +654,21 @@ fun RunningTimerView(
     val isPomodoroMode = state.isPomodoroMode
     val currentCycle = state.currentCycle
     val totalCycles = state.totalCycles
+
+    // Local ticker — only this composable updates; parent state is never modified per-second.
+    var displayTime by remember { mutableStateOf(formatTime(state.timeRemaining)) }
+    LaunchedEffect(state.isRunning, state.endTimeMillis, state.timeRemaining) {
+        while (true) {
+            val s = TimerStateManager.state.value
+            displayTime = if (s.isRunning && s.endTimeMillis > 0) {
+                val remaining = (s.endTimeMillis - System.currentTimeMillis()).coerceAtLeast(0)
+                formatTime(remaining)
+            } else {
+                formatTime(s.timeRemaining)
+            }
+            kotlinx.coroutines.delay(500)
+        }
+    }
 
     Box(
         modifier = Modifier
@@ -735,7 +753,7 @@ fun RunningTimerView(
             )
 
             Text(
-                text = timeLeft,
+                text = displayTime,
                 fontWeight = FontWeight.Bold,
                 textAlign = TextAlign.Center,
                 fontFamily = DMSerif,

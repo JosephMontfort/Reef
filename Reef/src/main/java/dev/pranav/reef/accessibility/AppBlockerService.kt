@@ -189,6 +189,7 @@ class AppBlockerService : android.app.Service() {
         super.onDestroy()
         handler.removeCallbacks(appPollRunnable)
         handler.removeCallbacks(routinePollRunnable)
+        stopForeground(STOP_FOREGROUND_REMOVE)
         try { unregisterReceiver(screenReceiver) } catch (_: Exception) {}
     }
 

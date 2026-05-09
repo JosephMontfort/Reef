@@ -92,6 +92,8 @@ fun WhitelistScreenWrapper(
         uiState = viewModel.uiState.value,
         onToggle = viewModel::toggleWhitelist,
         searchQuery = viewModel.searchQuery.value,
-        onSearchQueryChange = viewModel::onSearchQueryChange
+        onSearchQueryChange = viewModel::onSearchQueryChange,
+        hideSystemApps = viewModel.hideSystemApps.value,
+        onHideSystemAppsChange = viewModel::onHideSystemAppsChange
     )
 }

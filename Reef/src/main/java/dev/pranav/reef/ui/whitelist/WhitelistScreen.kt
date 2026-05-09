@@ -38,6 +38,7 @@ data class WhitelistedApp(
     val label: String,
     val icon: ImageBitmap,
     val isWhitelisted: Boolean,
+    val isSystemApp: Boolean = false,
     val user: UserHandle
 )
 
@@ -54,6 +55,8 @@ fun WhitelistScreen(
     searchQuery: String,
     onSearchQueryChange: (String) -> Unit,
     onToggle: (WhitelistedApp) -> Unit,
+    hideSystemApps: Boolean = false,
+    onHideSystemAppsChange: (Boolean) -> Unit = {},
 ) {
     val scrollBehavior =
         TopAppBarDefaults.exitUntilCollapsedScrollBehavior(rememberTopAppBarState())
@@ -72,6 +75,24 @@ fun WhitelistScreen(
                             Icon(
                                 Icons.AutoMirrored.Rounded.ArrowBack,
                                 contentDescription = stringResource(R.string.back)
+                            )
+                        }
+                    },
+                    actions = {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.padding(end = 8.dp)
+                        ) {
+                            Text(
+                                text = "Hide system",
+                                style = MaterialTheme.typography.labelMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                            Spacer(Modifier.width(4.dp))
+                            Switch(
+                                checked = hideSystemApps,
+                                onCheckedChange = onHideSystemAppsChange,
+                                modifier = Modifier.height(24.dp)
                             )
                         }
                     },
