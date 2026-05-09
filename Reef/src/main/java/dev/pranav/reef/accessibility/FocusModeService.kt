@@ -26,6 +26,7 @@ import dev.pranav.reef.timer.PomodoroPhase
 import dev.pranav.reef.timer.TimerSessionState
 import dev.pranav.reef.timer.TimerStateManager
 import dev.pranav.reef.util.*
+import dev.pranav.reef.util.NotificationHelper.createNotificationChannel
 import java.util.Locale
 import java.util.concurrent.TimeUnit
 
@@ -56,6 +57,7 @@ class FocusModeService : Service() {
 
     override fun onCreate() {
         super.onCreate()
+        createNotificationChannel()
         if (!isPrefsInitialized) {
             createDeviceProtectedStorageContext().also { safeContext ->
                 prefs = safeContext.getSharedPreferences("prefs", MODE_PRIVATE)
