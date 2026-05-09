@@ -313,31 +313,27 @@ class FocusModeService : Service() {
             setContentTitle(title)
 
             if (isRunning) {
-                val customView = RemoteViews(packageName, R.layout.notification_live_timer)
-                val elapsedFinishTime = SystemClock.elapsedRealtime() + timeLeft
+                // CRUCIAL: HyperOS and Dynamic Islands require the native chronometer to be enabled.
+                setUsesChronometer(true)
+                setChronometerCountDown(true)
+                setWhen(System.currentTimeMillis() + timeLeft)
                 
-                // Bind the system clock and set the timer logic directly into the RemoteViews layout
-                customView.setChronometer(R.id.live_chronometer, elapsedFinishTime, null, true)
-                customView.setBoolean(R.id.live_chronometer, "setCountDown", true)
-                
-                setCustomContentView(customView)
-                setCustomBigContentView(customView)
-                
-                // Explicitly disable the OS-level chronometer header injections 
-                setUsesChronometer(false)
-                setStyle(null)
-                
-                // Safe fallback for edge cases
-                setContentText(getString(R.string.time_remaining, "${TimeUnit.MILLISECONDS.toMinutes(timeLeft)} m"))
-            } else {
-                // Clear custom layouts when paused so it reverts back to default text display
+                // Clear custom layouts so the OS can parse the notification cleanly for Live Alerts
                 setCustomContentView(null)
                 setCustomBigContentView(null)
-                setUsesChronometer(false)
                 setStyle(null)
                 
+                setContentText(getString(R.string.time_remaining, "${TimeUnit.MILLISECONDS.toMinutes(timeLeft)} m"))
+            } else {
+                setUsesChronometer(false)
                 setWhen(System.currentTimeMillis())
+                
+                setCustomContentView(null)
+                setCustomBigContentView(null)
+                setStyle(null)
+                
                 setContentText(getString(R.string.paused_time, "${TimeUnit.MILLISECONDS.toMinutes(timeLeft)} m"))
+            } m"))
             }
 
             // Dynamic-island / promoted chip: show remaining minutes
