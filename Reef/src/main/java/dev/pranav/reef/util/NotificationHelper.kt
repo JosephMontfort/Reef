@@ -3,6 +3,8 @@ package dev.pranav.reef.util
 import android.Manifest
 import android.app.NotificationChannel
 import android.app.NotificationManager
+import android.widget.RemoteViews
+import dev.pranav.reef.R
 import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
