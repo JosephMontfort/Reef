@@ -366,8 +366,11 @@ class FocusModeService : Service() {
         }
 
         return notificationBuilder!!.apply {
-            setContentTitle(title)
-            setContentText(text)
+            val collapsedText = if (endTimeMillis > 0) text else title
+            val expandedText = if (endTimeMillis > 0) title else text
+            setContentTitle(collapsedText)
+            setContentText(expandedText)
+            setSubText(expandedText)
 
             // Live countdown: delegate to the system Chronometer widget.
             // setWhen(endTimeMillis) + setUsesChronometer(true) + count-down flag
