@@ -373,10 +373,8 @@ class FocusModeService : Service() {
             // setWhen(endTimeMillis) + setUsesChronometer(true) + count-down flag
             // lets Android render "MM:SS" natively — no app-side ticking needed.
             if (endTimeMillis > 0) {
-                // Convert wall-clock endTime to SystemClock.elapsedRealtime base
-                val elapsedBase = SystemClock.elapsedRealtime() +
-                        (endTimeMillis - System.currentTimeMillis())
-                setWhen(elapsedBase)
+                // Use wall-clock time directly for notification chronometer
+                setWhen(endTimeMillis)
                 setUsesChronometer(true)
                 setChronometerCountDown(true)
                 setShowWhen(true)
