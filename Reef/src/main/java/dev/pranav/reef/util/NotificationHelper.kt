@@ -40,7 +40,7 @@ object NotificationHelper {
             }
         )
         notificationManager.createNotificationChannel(
-                getString(R.string.blocker_channel_name),
+                NotificationChannel(BLOCKER_CHANNEL_ID, getString(R.string.blocker_channel_name),
                 NotificationManager.IMPORTANCE_HIGH
             ).apply {
                 description = getString(R.string.blocker_channel_description)
