@@ -359,6 +359,8 @@ class FocusModeService : Service() {
                 .setSmallIcon(R.drawable.hourglass)
                 .setPriority(NotificationCompat.PRIORITY_HIGH)
                 .setOngoing(true)
+            .setUsesChronometer(true)
+            .setChronometerCountDown(true)
                 .setOnlyAlertOnce(true)
                 .setRequestPromotedOngoing(true)
                 .setCategory(Notification.CATEGORY_PROGRESS)
