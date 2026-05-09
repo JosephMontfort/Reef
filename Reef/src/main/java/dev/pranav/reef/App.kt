@@ -8,14 +8,14 @@ import android.content.Intent
 import android.util.Log
 import androidx.compose.material3.ColorScheme
 import androidx.work.*
-import dev.pranav.reef.accessibility.BlockerService
+import dev.pranav.reef.accessibility.AppBlockerService
 import dev.pranav.reef.receivers.DailySummaryScheduler
 import dev.pranav.reef.services.routines.RoutineAlarmScheduler
 import dev.pranav.reef.services.routines.RoutineSessionManager
 import dev.pranav.reef.util.*
 import java.util.concurrent.TimeUnit
 
-class App: Application(), Configuration.Provider {
+class App : Application(), Configuration.Provider {
 
     override val workManagerConfiguration: Configuration
         get() = Configuration.Builder()
@@ -32,6 +32,9 @@ class App: Application(), Configuration.Provider {
         FocusStats.init(this)
         WebsiteBlocklist.init(this)
 
+        // Start the UsageStats-based app blocker immediately
+        AppBlockerService.start(this)
+
         scheduleWatcher(this)
 
         RoutineSessionManager.evaluateAndSync(this)
@@ -47,9 +50,7 @@ class App: Application(), Configuration.Provider {
 
     private fun setupSafePreferences() {
         val deviceContext = createDeviceProtectedStorageContext()
-
         deviceContext.moveSharedPreferencesFrom(this, "prefs")
-
         prefs = deviceContext.getSharedPreferences("prefs", MODE_PRIVATE)
     }
 
@@ -63,17 +64,17 @@ class App: Application(), Configuration.Provider {
             val alarmManager = getSystemService(ALARM_SERVICE) as AlarmManager
             val currentTime = System.currentTimeMillis()
 
-            // Alarm to restart BlockerService
-            val serviceIntent = Intent(this, BlockerService::class.java)
-            val servicePendingIntent = PendingIntent.getService(
+            // Restart the UsageStats-based app blocker after a crash
+            val appBlockerIntent = Intent(this, AppBlockerService::class.java)
+            val appBlockerPendingIntent = PendingIntent.getService(
                 this,
                 111,
-                serviceIntent,
+                appBlockerIntent,
                 PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
             )
-            alarmManager.set(AlarmManager.RTC_WAKEUP, currentTime + 1000, servicePendingIntent)
+            alarmManager.set(AlarmManager.RTC_WAKEUP, currentTime + 1000, appBlockerPendingIntent)
 
-            // Alarm to show DebugActivity with error message
+            // Show DebugActivity with the error details
             val debugIntent = Intent(this, DebugActivity::class.java).apply {
                 putExtra("error", stackTrace)
                 addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK)

@@ -64,7 +64,7 @@ fun PermissionsScreen(onBackClick: () -> Unit) {
             if (event == Lifecycle.Event.ON_RESUME) {
                 permissions = context.checkAllPermissions()
 
-                if (permissions.all { it.isGranted }) {
+                if (permissions.all { it.isGranted || it.isOptional }) {
                     onBackClick()
                 }
             }
@@ -172,13 +172,20 @@ fun PermissionItem(
                 horizontalArrangement = Arrangement.SpaceBetween,
                 modifier = Modifier.fillMaxWidth()
             ) {
-                Text(
-                    text = permission.title,
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.SemiBold,
-                    modifier = Modifier.weight(1f)
-                )
-
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = permission.title,
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                    if (permission.isOptional) {
+                        Text(
+                            text = stringResource(R.string.optional),
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.outline
+                        )
+                    }
+                }
                 if (permission.isGranted) {
                     Icon(
                         imageVector = Icons.Rounded.CheckCircle,
@@ -202,7 +209,10 @@ fun PermissionItem(
                     onClick = onGrantClick,
                     modifier = Modifier.align(Alignment.End)
                 ) {
-                    Text(stringResource(R.string.grant))
+                    Text(
+                        if (permission.isOptional) stringResource(R.string.grant_optional)
+                        else stringResource(R.string.grant)
+                    )
                 }
             }
         }

@@ -106,7 +106,9 @@ data class PermissionStatus(
     val type: PermissionType,
     val isGranted: Boolean,
     val title: String,
-    val description: String
+    val description: String,
+    /** Optional permissions don't block the app from working; skipping them is allowed. */
+    val isOptional: Boolean = false
 )
 
 fun Context.checkAllPermissions(): List<PermissionStatus> {
@@ -117,7 +119,8 @@ fun Context.checkAllPermissions(): List<PermissionStatus> {
             type = PermissionType.ACCESSIBILITY,
             isGranted = isAccessibilityServiceEnabledForBlocker(),
             title = getString(R.string.accessibility_service_name),
-            description = getString(R.string.accessibility_service_description)
+            description = getString(R.string.accessibility_service_website_only_description),
+            isOptional = true
         )
     )
 

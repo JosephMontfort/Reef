@@ -62,6 +62,27 @@
             android:name=".PermissionsCheckActivity"
             android:label="Permissions" />
 
+        <!-- UsageStats-based app blocker — primary blocking mechanism -->
+        <service
+            android:name=".accessibility.AppBlockerService"
+            android:directBootAware="true"
+            android:exported="false"
+            android:foregroundServiceType="specialUse">
+            <property
+                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+                android:value="Monitors foreground app usage to enforce screen time limits without requiring Accessibility Service" />
+        </service>
+
+        <!-- Overlay activity shown when a blocked app is detected -->
+        <activity
+            android:name=".BlockedActivity"
+            android:exported="false"
+            android:excludeFromRecents="true"
+            android:noHistory="true"
+            android:taskAffinity=""
+            android:launchMode="singleTask"
+            android:theme="@style/Theme.Reef" />
+
         <service
             android:name=".accessibility.BlockerService"
             android:directBootAware="true"

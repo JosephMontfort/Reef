@@ -5,6 +5,7 @@ import android.content.Context
 import android.content.Intent
 import android.util.Log
 import androidx.core.content.edit
+import dev.pranav.reef.accessibility.AppBlockerService
 import dev.pranav.reef.accessibility.BlockerService
 import dev.pranav.reef.accessibility.FocusModeService
 import dev.pranav.reef.services.routines.RoutineAlarmScheduler
@@ -14,10 +15,9 @@ import dev.pranav.reef.util.isAccessibilityServiceEnabledForBlocker
 import dev.pranav.reef.util.isPrefsInitialized
 import dev.pranav.reef.util.prefs
 
-class BootReceiver: BroadcastReceiver() {
+class BootReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
-        val safeContext =
-            context.createDeviceProtectedStorageContext()
+        val safeContext = context.createDeviceProtectedStorageContext()
 
         if (!isPrefsInitialized) {
             prefs = safeContext.getSharedPreferences("prefs", Context.MODE_PRIVATE)
@@ -51,10 +51,15 @@ class BootReceiver: BroadcastReceiver() {
     }
 
     private fun refreshServices(context: Context) {
+        // Always start the UsageStats-based app blocker — it doesn't need any special
+        // user-granted toggle, only the Usage Access permission.
+        AppBlockerService.start(context)
+
+        // Also nudge the accessibility service if the user has it enabled
+        // (needed for website/browser blocking only).
         if (context.isAccessibilityServiceEnabledForBlocker()) {
-            val accessibilityIntent = Intent(context, BlockerService::class.java)
             try {
-                context.startService(accessibilityIntent)
+                context.startService(Intent(context, BlockerService::class.java))
             } catch (e: Exception) {
                 Log.e("BootReceiver", "Could not nudge BlockerService", e)
             }

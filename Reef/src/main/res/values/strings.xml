@@ -396,7 +396,18 @@
     <string name="routine_active_single">%1$s active</string>
     <string name="active_routines_list">Active: %1$s</string>
 
-    <!-- Bottom Navigation -->
+    <!-- App Blocker Service (UsageStats-based) -->
+    <string name="blocker_service_running">Monitoring apps in background</string>
+
+    <!-- BlockedActivity -->
+    <string name="go_home">Go Home</string>
+
+    <!-- Permissions screen -->
+    <string name="optional">Optional</string>
+    <string name="grant_optional">Grant (Optional)</string>
+    <string name="accessibility_service_website_only_description">Only needed for website / browser blocking. App blocking now works without this permission. On Xiaomi devices you can skip this if you don\'t use website limits.</string>
+
+
     <string name="nav_home">Home</string>
     <string name="nav_stats">Stats</string>
     <string name="nav_focus">Focus</string>
