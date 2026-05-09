@@ -14,6 +14,7 @@ import android.media.AudioAttributes
 import android.os.Build
 import android.os.CountDownTimer
 import android.os.IBinder
+import android.os.SystemClock
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import androidx.core.app.ServiceCompat
@@ -312,13 +313,29 @@ class FocusModeService : Service() {
             setContentTitle(title)
 
             if (isRunning) {
-                setUsesChronometer(true)
-                setChronometerCountDown(true)
-                setWhen(System.currentTimeMillis() + timeLeft)
-                // Content text is a fallback for older launchers that don't render chronometers
+                val customView = RemoteViews(packageName, R.layout.notification_live_timer)
+                val elapsedFinishTime = SystemClock.elapsedRealtime() + timeLeft
+                
+                // Bind the system clock and set the timer logic directly into the RemoteViews layout
+                customView.setChronometer(R.id.live_chronometer, elapsedFinishTime, null, true)
+                customView.setBoolean(R.id.live_chronometer, "setCountDown", true)
+                
+                setCustomContentView(customView)
+                setCustomBigContentView(customView)
+                
+                // Explicitly disable the OS-level chronometer header injections 
+                setUsesChronometer(false)
+                setStyle(null)
+                
+                // Safe fallback for edge cases
                 setContentText(getString(R.string.time_remaining, "${TimeUnit.MILLISECONDS.toMinutes(timeLeft)} m"))
             } else {
+                // Clear custom layouts when paused so it reverts back to default text display
+                setCustomContentView(null)
+                setCustomBigContentView(null)
                 setUsesChronometer(false)
+                setStyle(null)
+                
                 setWhen(System.currentTimeMillis())
                 setContentText(getString(R.string.paused_time, "${TimeUnit.MILLISECONDS.toMinutes(timeLeft)} m"))
             }
