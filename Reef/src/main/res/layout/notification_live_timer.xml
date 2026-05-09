@@ -9,11 +9,9 @@
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:text="Time remaining: "
-        android:textAppearance="@style/TextAppearance.Compat.Notification.Content" />
     <Chronometer
         android:id="@+id/live_chronometer"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:countDown="true"
-        android:textAppearance="@style/TextAppearance.Compat.Notification.Content" />
 </LinearLayout>
