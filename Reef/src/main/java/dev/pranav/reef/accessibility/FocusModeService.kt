@@ -6,7 +6,9 @@ import android.app.NotificationManager
 import android.app.PendingIntent
 import android.app.Service
 import android.content.Intent
-import android.content.Intent.FLAG_RECEIVER_FOREGROUND
+import android.widget.RemoteViews
+import android.content.Intent
+import android.widget.RemoteViews.FLAG_RECEIVER_FOREGROUND
 import android.content.pm.ServiceInfo
 import android.media.AudioAttributes
 import android.os.Build
