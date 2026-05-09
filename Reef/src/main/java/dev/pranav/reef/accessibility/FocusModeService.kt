@@ -9,9 +9,9 @@ import android.content.Intent
 import android.content.Intent.FLAG_RECEIVER_FOREGROUND
 import android.content.pm.ServiceInfo
 import android.media.AudioAttributes
+import android.os.Build
 import android.os.CountDownTimer
 import android.os.IBinder
-import android.os.SystemClock
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import androidx.core.app.ServiceCompat
@@ -26,7 +26,6 @@ import dev.pranav.reef.timer.PomodoroPhase
 import dev.pranav.reef.timer.TimerSessionState
 import dev.pranav.reef.timer.TimerStateManager
 import dev.pranav.reef.util.*
-import dev.pranav.reef.util.NotificationHelper.createNotificationChannel
 import java.util.Locale
 import java.util.concurrent.TimeUnit
 
@@ -48,22 +47,25 @@ class FocusModeService : Service() {
 
     private val notificationManager by lazy { NotificationManagerCompat.from(this) }
     private val systemNotificationManager by lazy { getSystemService(NOTIFICATION_SERVICE) as NotificationManager }
-
-    // Single CountDownTimer used ONLY for detecting phase completion — no per-tick work.
     private var countDownTimer: CountDownTimer? = null
     private var notificationBuilder: NotificationCompat.Builder? = null
     private var previousInterruptionFilter: Int? = null
     private var initialDuration: Long = 0
 
+    // Track the minute that was last reflected in the notification so we only
+    // call notificationManager.notify() ~once per minute during ticking, not every second.
+    private var lastNotifiedMinute = -1L
+
     override fun onCreate() {
         super.onCreate()
-        createNotificationChannel()
         if (!isPrefsInitialized) {
-            createDeviceProtectedStorageContext().also { safeContext ->
-                prefs = safeContext.getSharedPreferences("prefs", MODE_PRIVATE)
+            createDeviceProtectedStorageContext().also { ctx ->
+                prefs = ctx.getSharedPreferences("prefs", MODE_PRIVATE)
             }
         }
     }
+
+    // ─── Lifecycle ──────────────────────────────────────────────────────────────
 
     private fun promoteToForeground() {
         val state = TimerStateManager.state.value
@@ -72,22 +74,19 @@ class FocusModeService : Service() {
 
         val notification = buildNotification(
             title = getNotificationTitle(),
-            text = getString(R.string.time_remaining, formatTime(timeToDisplay)),
+            isRunning = state.isRunning,
             showPauseButton = !state.isStrictMode && state.isRunning,
-            endTimeMillis = if (state.isRunning && state.endTimeMillis > 0) state.endTimeMillis
-                            else System.currentTimeMillis() + timeToDisplay
+            timeLeft = timeToDisplay
         )
 
-        val foregroundType = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
-            ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE
-        } else 0
+        val foregroundType = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE)
+            ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE else 0
 
         ServiceCompat.startForeground(this, NOTIFICATION_ID, notification, foregroundType)
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         if (intent?.action == null) return START_NOT_STICKY
-
         if (intent.action != ACTION_PAUSE) promoteToForeground()
 
         when (intent.action) {
@@ -96,11 +95,26 @@ class FocusModeService : Service() {
             ACTION_RESTART -> restartCurrentPhase()
             ACTION_START   -> startTimer()
         }
-
         return START_STICKY
     }
 
-    // ─── Timer lifecycle ────────────────────────────────────────────────────────
+    override fun onBind(intent: Intent): IBinder? = null
+
+    override fun onDestroy() {
+        super.onDestroy()
+        countDownTimer?.cancel()
+        // Ensure the foreground notification is removed on Android 12+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+            stopForeground(STOP_FOREGROUND_REMOVE)
+        }
+        notificationManager.cancel(NOTIFICATION_ID)
+        restoreDND()
+        if (FocusStats.activeSession != null) FocusStats.endSession(isCompleted = false)
+        prefs.edit { putBoolean("focus_mode", false) }
+        TimerStateManager.reset()
+    }
+
+    // ─── Timer actions ──────────────────────────────────────────────────────────
 
     private fun startTimer() {
         val focusTimeMillis = prefs.getLong("focus_time", TimeUnit.MINUTES.toMillis(10))
@@ -108,32 +122,31 @@ class FocusModeService : Service() {
         val isPomodoroMode = prefs.getBoolean("pomodoro_mode", false)
 
         initialDuration = focusTimeMillis
+        lastNotifiedMinute = -1L
 
         if (isPomodoroMode) {
             val config = PomodoroConfig(
-                focusDuration      = prefs.getLong("pomodoro_focus_duration",       25 * 60 * 1000L),
-                shortBreakDuration = prefs.getLong("pomodoro_short_break_duration",  5 * 60 * 1000L),
-                longBreakDuration  = prefs.getLong("pomodoro_long_break_duration",  15 * 60 * 1000L),
+                focusDuration = prefs.getLong("pomodoro_focus_duration", 25 * 60 * 1000L),
+                shortBreakDuration = prefs.getLong("pomodoro_short_break_duration", 5 * 60 * 1000L),
+                longBreakDuration = prefs.getLong("pomodoro_long_break_duration", 15 * 60 * 1000L),
                 cyclesBeforeLongBreak = prefs.getInt("pomodoro_cycles_before_long_break", 4)
             )
             TimerStateManager.setPomodoroConfig(config)
-            val currentCycle = prefs.getInt("pomodoro_current_cycle", 1)
-            val endTime = System.currentTimeMillis() + focusTimeMillis
             TimerStateManager.updateState {
                 copy(
                     isRunning = true, isPaused = false,
-                    timeRemaining = focusTimeMillis, endTimeMillis = endTime,
-                    pomodoroPhase = PomodoroPhase.FOCUS, currentCycle = currentCycle,
+                    timeRemaining = focusTimeMillis,
+                    pomodoroPhase = PomodoroPhase.FOCUS,
+                    currentCycle = prefs.getInt("pomodoro_current_cycle", 1),
                     totalCycles = config.cyclesBeforeLongBreak,
                     isPomodoroMode = true, isStrictMode = isStrictMode
                 )
             }
         } else {
-            val endTime = System.currentTimeMillis() + focusTimeMillis
             TimerStateManager.updateState {
                 copy(
                     isRunning = true, isPaused = false,
-                    timeRemaining = focusTimeMillis, endTimeMillis = endTime,
+                    timeRemaining = focusTimeMillis,
                     isPomodoroMode = false, isStrictMode = isStrictMode
                 )
             }
@@ -141,59 +154,57 @@ class FocusModeService : Service() {
 
         FocusStats.startSession(if (isPomodoroMode) SessionType.POMODORO else SessionType.SIMPLE)
         FocusStats.startPhase(PhaseType.FOCUS, focusTimeMillis)
-
         prefs.edit { putBoolean("focus_mode", true) }
         enableDNDIfNeeded()
 
-        val endTime = TimerStateManager.state.value.endTimeMillis
-        postStateChangeNotification(showPauseButton = !isStrictMode, endTimeMillis = endTime)
-        broadcastStateChange(formatTime(focusTimeMillis))
-        scheduleCompletionTimer(focusTimeMillis)
+        postNotification(
+            title = getNotificationTitle(),
+            isRunning = true,
+            showPauseButton = !isStrictMode,
+            timeLeft = focusTimeMillis
+        )
+        startCountdown(focusTimeMillis)
     }
 
     private fun pauseTimer() {
         val state = TimerStateManager.state.value
         if (state.isStrictMode) return
-
         countDownTimer?.cancel()
-
-        // Compute exact remaining time from the stored end-timestamp rather than
-        // relying on the last ticked value — avoids drift.
-        val remaining = if (state.endTimeMillis > 0)
-            (state.endTimeMillis - System.currentTimeMillis()).coerceAtLeast(0)
-        else state.timeRemaining
-
-        TimerStateManager.updateState {
-            copy(isRunning = false, isPaused = true, timeRemaining = remaining, endTimeMillis = 0)
-        }
-
+        TimerStateManager.updateState { copy(isRunning = false, isPaused = true) }
         prefs.edit { putBoolean("focus_mode", false) }
         restoreDND()
 
-        postStateChangeNotification(showPauseButton = false, endTimeMillis = 0, staticText = formatTime(remaining))
-        broadcastStateChange(formatTime(remaining))
+        // Paused: disable chronometer and show static remaining time
+        lastNotifiedMinute = -1L
+        postNotification(
+            title = getNotificationTitle(),
+            isRunning = false,
+            showPauseButton = false,
+            timeLeft = state.timeRemaining
+        )
+        broadcastTimerUpdate(formatTime(state.timeRemaining))
     }
 
     private fun resumeTimer() {
         val state = TimerStateManager.state.value
-        val endTime = System.currentTimeMillis() + state.timeRemaining
-
-        TimerStateManager.updateState {
-            copy(isRunning = true, isPaused = false, endTimeMillis = endTime)
-        }
+        TimerStateManager.updateState { copy(isRunning = true, isPaused = false) }
 
         val isFocusPhase = state.isPomodoroMode && state.pomodoroPhase == PomodoroPhase.FOCUS
         prefs.edit { putBoolean("focus_mode", isFocusPhase || !state.isPomodoroMode) }
         if (isFocusPhase || !state.isPomodoroMode) enableDNDIfNeeded()
 
-        postStateChangeNotification(showPauseButton = !state.isStrictMode, endTimeMillis = endTime)
-        broadcastStateChange(formatTime(state.timeRemaining))
-        scheduleCompletionTimer(state.timeRemaining)
+        lastNotifiedMinute = -1L
+        postNotification(
+            title = getNotificationTitle(),
+            isRunning = true,
+            showPauseButton = !state.isStrictMode,
+            timeLeft = state.timeRemaining
+        )
+        startCountdown(state.timeRemaining)
     }
 
     private fun restartCurrentPhase() {
         countDownTimer?.cancel()
-
         val currentPhaseType = when (TimerStateManager.state.value.pomodoroPhase) {
             PomodoroPhase.SHORT_BREAK -> PhaseType.SHORT_BREAK
             PomodoroPhase.LONG_BREAK  -> PhaseType.LONG_BREAK
@@ -201,34 +212,167 @@ class FocusModeService : Service() {
         }
         FocusStats.endPhase(isCompleted = false)
         FocusStats.startPhase(currentPhaseType, initialDuration)
-
-        val endTime = System.currentTimeMillis() + initialDuration
         TimerStateManager.updateState {
-            copy(timeRemaining = initialDuration, endTimeMillis = endTime, isPaused = false, isRunning = true)
+            copy(timeRemaining = initialDuration, isPaused = false, isRunning = true)
         }
-
         prefs.edit { putBoolean("focus_mode", true) }
 
-        postStateChangeNotification(
+        lastNotifiedMinute = -1L
+        postNotification(
+            title = getNotificationTitle(),
+            isRunning = true,
             showPauseButton = !TimerStateManager.state.value.isStrictMode,
-            endTimeMillis = endTime
+            timeLeft = initialDuration
         )
-        broadcastStateChange(formatTime(initialDuration))
-        scheduleCompletionTimer(initialDuration)
+        broadcastTimerUpdate(formatTime(initialDuration))
+        startCountdown(initialDuration)
     }
 
-    // ─── Completion / phase transition ──────────────────────────────────────────
+    // ─── Countdown ──────────────────────────────────────────────────────────────
+
+    private fun startCountdown(timeMillis: Long) {
+        countDownTimer?.cancel()
+        countDownTimer = object : CountDownTimer(timeMillis, 1000) {
+            override fun onTick(millisUntilFinished: Long) {
+                if (TimerStateManager.state.value.isPaused) return
+                TimerStateManager.updateState { copy(timeRemaining = millisUntilFinished) }
+
+                // ── Broadcast every second so the in-app timer UI stays smooth ──
+                broadcastTimerUpdate(formatTime(millisUntilFinished))
+
+                // ── Update notification only when the displayed minute changes ──
+                // The chronometer handles second-level counting; we only need to
+                // post a new notification to update the chip text and action buttons.
+                val minute = millisUntilFinished / 60_000L
+                if (minute != lastNotifiedMinute) {
+                    lastNotifiedMinute = minute
+                    postNotification(
+                        title = getNotificationTitle(),
+                        isRunning = true,
+                        showPauseButton = !TimerStateManager.state.value.isStrictMode,
+                        timeLeft = millisUntilFinished
+                    )
+                }
+            }
+
+            override fun onFinish() = handleTimerComplete()
+        }.start()
+    }
+
+    // ─── Notification ───────────────────────────────────────────────────────────
+
+    /**
+     * Builds and posts the notification. Uses [setUsesChronometer] + [setChronometerCountDown]
+     * so the OS counts down live without the service posting every second.
+     */
+    private fun postNotification(
+        title: String,
+        isRunning: Boolean,
+        showPauseButton: Boolean,
+        timeLeft: Long
+    ) {
+        notificationManager.notify(NOTIFICATION_ID, buildNotification(title, isRunning, showPauseButton, timeLeft))
+    }
+
+    private fun buildNotification(
+        title: String,
+        isRunning: Boolean,
+        showPauseButton: Boolean,
+        timeLeft: Long
+    ): Notification {
+        val isStrictMode = TimerStateManager.state.value.isStrictMode
+
+        if (notificationBuilder == null) {
+            val tapIntent = Intent(this, MainActivity::class.java).apply {
+                putExtra("navigate_to_timer", true)
+                flags = Intent.FLAG_ACTIVITY_SINGLE_TOP
+            }
+            val tapPending = PendingIntent.getActivity(
+                this, 0, tapIntent,
+                PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
+            )
+            notificationBuilder = NotificationCompat.Builder(this, FOCUS_MODE_CHANNEL_ID)
+                .setContentIntent(tapPending)
+                .setSmallIcon(R.drawable.hourglass)
+                .setPriority(NotificationCompat.PRIORITY_HIGH)
+                .setOngoing(true)
+                .setOnlyAlertOnce(true)
+                .setRequestPromotedOngoing(true)
+                .setCategory(Notification.CATEGORY_PROGRESS)
+                .setForegroundServiceBehavior(NotificationCompat.FOREGROUND_SERVICE_IMMEDIATE)
+        }
+
+        // ── Chronometer: let the OS count down live in the notification ──────
+        // When running: anchor setWhen to the future finish time so the system
+        //   displays a live countdown automatically.
+        // When paused:  disable chronometer and show the static remaining time.
+        notificationBuilder!!.apply {
+            setContentTitle(title)
+
+            if (isRunning) {
+                setUsesChronometer(true)
+                setChronometerCountDown(true)
+                setWhen(System.currentTimeMillis() + timeLeft)
+                // Content text is a fallback for older launchers that don't render chronometers
+                setContentText(getString(R.string.time_remaining, formatTime(timeLeft)))
+            } else {
+                setUsesChronometer(false)
+                setWhen(System.currentTimeMillis())
+                setContentText(getString(R.string.paused_time, formatTime(timeLeft)))
+            }
+
+            // Dynamic-island / promoted chip: show remaining minutes
+            val chipMin = TimeUnit.MILLISECONDS.toMinutes(timeLeft)
+            setShortCriticalText(if (chipMin > 0) "${chipMin}m" else "<1m")
+
+            clearActions()
+
+            val state = TimerStateManager.state.value
+            val isBreak = state.pomodoroPhase == PomodoroPhase.SHORT_BREAK ||
+                    state.pomodoroPhase == PomodoroPhase.LONG_BREAK
+
+            if (!isStrictMode || (!showPauseButton && isBreak && state.isPaused)) {
+                val (action, label) = if (showPauseButton)
+                    ACTION_PAUSE to getString(R.string.notification_pause)
+                else
+                    ACTION_RESUME to getString(R.string.notification_resume)
+
+                val actionPending = PendingIntent.getService(
+                    this@FocusModeService,
+                    if (showPauseButton) 1 else 2,
+                    Intent(this@FocusModeService, FocusModeService::class.java).apply { this.action = action },
+                    PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
+                )
+                addAction(NotificationCompat.Action.Builder(0, label, actionPending).build())
+            }
+        }
+        return notificationBuilder!!.build()
+    }
+
+    // ─── Broadcast ──────────────────────────────────────────────────────────────
+
+    private fun broadcastTimerUpdate(formattedTime: String) {
+        val state = TimerStateManager.state.value
+        sendBroadcast(Intent(ACTION_TIMER_UPDATED).apply {
+            setPackage(packageName)
+            putExtra(EXTRA_TIME_LEFT, formattedTime)
+            putExtra(EXTRA_TIMER_STATE, state.pomodoroPhase.name)
+            addFlags(FLAG_RECEIVER_FOREGROUND)
+        })
+    }
+
+    // ─── Timer completion ───────────────────────────────────────────────────────
 
     private fun handleTimerComplete() {
-        val state = TimerStateManager.state.value
-        if (!state.isPomodoroMode) endSession() else transitionPomodoroPhase()
+        if (!TimerStateManager.state.value.isPomodoroMode) endSession()
+        else transitionPomodoroPhase()
     }
 
     private fun endSession() {
-        TimerStateManager.updateState { copy(isRunning = false, isPaused = false, endTimeMillis = 0) }
+        TimerStateManager.updateState { copy(isRunning = false, isPaused = false) }
         prefs.edit { putBoolean("focus_mode", false) }
         FocusStats.endSession(isCompleted = true)
-        broadcastStateChange("00:00")
+        broadcastTimerUpdate("00:00")
         TimerStateManager.reset()
         restoreDND()
         showFocusCompleteNotification()
@@ -238,8 +382,8 @@ class FocusModeService : Service() {
     private fun transitionPomodoroPhase() {
         val state = TimerStateManager.state.value
         val config = TimerStateManager.getPomodoroConfig() ?: return endSession()
-
         val nextPhase = calculateNextPhase(state, config)
+
         FocusStats.endPhase(isCompleted = true)
 
         if (nextPhase.isComplete) {
@@ -253,34 +397,25 @@ class FocusModeService : Service() {
             PomodoroPhase.LONG_BREAK  -> PhaseType.LONG_BREAK
             else                      -> PhaseType.FOCUS
         }
-
         val shouldAutoStart = when (nextPhase.phase) {
-            PomodoroPhase.FOCUS ->
-                prefs.getBoolean("auto_start_pomodoro", true)
-            PomodoroPhase.SHORT_BREAK, PomodoroPhase.LONG_BREAK ->
-                prefs.getBoolean("auto_start_breaks", false)
-            else -> false
+            PomodoroPhase.FOCUS -> prefs.getBoolean("auto_start_pomodoro", true)
+            else                -> prefs.getBoolean("auto_start_breaks", false)
         }
-
-        val endTime = if (shouldAutoStart) System.currentTimeMillis() + nextPhase.duration else 0L
 
         TimerStateManager.updateState {
             copy(
-                pomodoroPhase = nextPhase.phase,
-                currentCycle  = nextPhase.currentCycle,
+                pomodoroPhase = nextPhase.phase, currentCycle = nextPhase.currentCycle,
                 timeRemaining = nextPhase.duration,
-                endTimeMillis = endTime,
-                isRunning     = shouldAutoStart,
-                isPaused      = !shouldAutoStart
+                isRunning = shouldAutoStart, isPaused = !shouldAutoStart
             )
         }
-
         prefs.edit {
             putInt("pomodoro_current_cycle", nextPhase.currentCycle)
             putBoolean("focus_mode", shouldAutoStart && nextPhase.phase == PomodoroPhase.FOCUS)
         }
 
         initialDuration = nextPhase.duration
+        lastNotifiedMinute = -1L
         FocusStats.startPhase(nextPhaseType, nextPhase.duration)
 
         if (nextPhase.phase == PomodoroPhase.FOCUS) {
@@ -293,222 +428,38 @@ class FocusModeService : Service() {
         if (prefs.getBoolean("pomodoro_sound_enabled", true)) playTransitionSound()
         if (prefs.getBoolean("pomodoro_vibration_enabled", true)) AndroidUtilities.vibrate(this, 1000)
 
-        val notifText = if (shouldAutoStart)
-            getString(R.string.time_remaining, formatTime(nextPhase.duration))
-        else getString(R.string.tap_to_start_next_phase)
-
-        // Force rebuild so title/actions reflect new phase
-        notificationBuilder = null
-        postStateChangeNotification(
+        postNotification(
+            title = getNotificationTitle(),
+            isRunning = shouldAutoStart,
             showPauseButton = shouldAutoStart && !state.isStrictMode,
-            endTimeMillis   = endTime,
-            staticText      = if (!shouldAutoStart) notifText else null
+            timeLeft = nextPhase.duration
         )
-        broadcastStateChange(formatTime(nextPhase.duration))
-
-        if (shouldAutoStart) scheduleCompletionTimer(nextPhase.duration)
+        broadcastTimerUpdate(formatTime(nextPhase.duration))
+        if (shouldAutoStart) startCountdown(nextPhase.duration)
     }
 
-    // ─── Notification helpers ────────────────────────────────────────────────────
-
-    /**
-     * Builds/updates the notification for a *state change* event (start, pause, resume,
-     * phase change). This is the ONLY place we call notificationManager.notify().
-     *
-     * @param endTimeMillis  When non-zero and the timer is running, the notification shows a
-     *                       live countdown using [Notification.EXTRA_CHRONOMETER_COUNT_DOWN].
-     *                       When zero (paused/stopped), [staticText] is shown instead.
-     */
-    private fun postStateChangeNotification(
-        showPauseButton: Boolean,
-        endTimeMillis: Long,
-        staticText: String? = null
-    ) {
-        val notification = buildNotification(
-            title          = getNotificationTitle(),
-            text           = staticText ?: getString(R.string.time_remaining, formatTime(
-                if (endTimeMillis > 0) (endTimeMillis - System.currentTimeMillis()).coerceAtLeast(0)
-                else TimerStateManager.state.value.timeRemaining
-            )),
-            showPauseButton = showPauseButton,
-            endTimeMillis  = endTimeMillis
-        )
-        notificationManager.notify(NOTIFICATION_ID, notification)
-    }
-
-    private fun buildNotification(
-        title: String,
-        text: String,
-        showPauseButton: Boolean,
-        endTimeMillis: Long
-    ): Notification {
-        val isStrictMode = TimerStateManager.state.value.isStrictMode
-
-        if (notificationBuilder == null) {
-            val tapIntent = Intent(this, MainActivity::class.java).apply {
-                putExtra("navigate_to_timer", true)
-                flags = Intent.FLAG_ACTIVITY_SINGLE_TOP
-            }
-            val tapPendingIntent = PendingIntent.getActivity(
-                this, 0, tapIntent,
-                PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
-            )
-
-            notificationBuilder = NotificationCompat.Builder(this, FOCUS_MODE_CHANNEL_ID)
-                .setContentIntent(tapPendingIntent)
-                .setSmallIcon(R.drawable.hourglass)
-                .setPriority(NotificationCompat.PRIORITY_HIGH)
-                .setOngoing(true)
-            .setUsesChronometer(true)
-            .setChronometerCountDown(true)
-                .setOnlyAlertOnce(true)
-                .setRequestPromotedOngoing(true)
-                .setCategory(Notification.CATEGORY_PROGRESS)
-                .setForegroundServiceBehavior(NotificationCompat.FOREGROUND_SERVICE_IMMEDIATE)
-        }
-
-        return notificationBuilder!!.apply {
-            val remainingMillis = if (endTimeMillis > 0) {
-                (endTimeMillis - System.currentTimeMillis()).coerceAtLeast(0L)
-            } else {
-                TimerStateManager.state.value.timeRemaining
-            }
-            val timerOnly = formatTime(remainingMillis)
-            val expandedLabel = getString(R.string.time_remaining, timerOnly)
-
-            // Compact view: timer only.
-            // Expanded view: keep the label.
-            setContentTitle(if (endTimeMillis > 0) timerOnly else title)
-            setContentText(if (endTimeMillis > 0) title else text)
-            setSubText(if (endTimeMillis > 0) expandedLabel else text)
-
-            // Live countdown handled by the system, not per-second app updates.
-            if (endTimeMillis > 0) {
-                setWhen(endTimeMillis)
-                setUsesChronometer(true)
-                setChronometerCountDown(true)
-                setShowWhen(true)
-            } else {
-                setUsesChronometer(false)
-                setShowWhen(false)
-            }
-
-            clearActions()
-
-            val state = TimerStateManager.state.value
-            val isBreak = state.pomodoroPhase == PomodoroPhase.SHORT_BREAK ||
-                          state.pomodoroPhase == PomodoroPhase.LONG_BREAK
-
-            if (!isStrictMode || (!showPauseButton && isBreak && state.isPaused)) {
-                val (action, label) = if (showPauseButton)
-                    ACTION_PAUSE  to getString(R.string.notification_pause)
-                else
-                    ACTION_RESUME to getString(R.string.notification_resume)
-
-                val actionIntent = Intent(this@FocusModeService, FocusModeService::class.java)
-                    .apply { this.action = action }
-
-                val actionPendingIntent = PendingIntent.getService(
-                    this@FocusModeService,
-                    if (showPauseButton) 1 else 2,
-                    actionIntent,
-                    PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
-                )
-                addAction(NotificationCompat.Action.Builder(0, label, actionPendingIntent).build())
-            }
-        }.build()
-    }
-
-    /** Broadcast a state-change event to the UI. NOT called per-second. */
-    private fun broadcastStateChange(formattedTime: String) {
-        val state = TimerStateManager.state.value
-        val intent = Intent(ACTION_TIMER_UPDATED).apply {
-            setPackage(packageName)
-            putExtra(EXTRA_TIME_LEFT, formattedTime)
-            putExtra(EXTRA_TIMER_STATE, state.pomodoroPhase.name)
-            addFlags(FLAG_RECEIVER_FOREGROUND)
-        }
-        sendBroadcast(intent)
-    }
-
-    // ─── Scheduling ──────────────────────────────────────────────────────────────
-
-    /**
-     * Schedules a [CountDownTimer] whose ONLY purpose is to fire [handleTimerComplete]
-     * when the phase duration expires. [onTick] is intentionally empty — the UI derives
-     * the live countdown from [TimerSessionState.endTimeMillis] locally.
-     */
-    private fun scheduleCompletionTimer(timeMillis: Long) {
-        countDownTimer?.cancel()
-        countDownTimer = object : CountDownTimer(timeMillis, timeMillis /* one tick at end */) {
-            override fun onTick(millisUntilFinished: Long) { /* intentionally empty */ }
-            override fun onFinish() = handleTimerComplete()
-        }.start()
-    }
-
-    // ─── Pomodoro phase logic ────────────────────────────────────────────────────
+    // ─── Phase calculation ───────────────────────────────────────────────────────
 
     private data class NextPhaseResult(
-        val phase: PomodoroPhase,
-        val duration: Long,
-        val currentCycle: Int,
-        val isComplete: Boolean
+        val phase: PomodoroPhase, val duration: Long,
+        val currentCycle: Int, val isComplete: Boolean
     )
 
-    private fun calculateNextPhase(state: TimerSessionState, config: PomodoroConfig): NextPhaseResult {
-        return when (state.pomodoroPhase) {
+    private fun calculateNextPhase(state: TimerSessionState, config: PomodoroConfig): NextPhaseResult =
+        when (state.pomodoroPhase) {
             PomodoroPhase.FOCUS -> {
-                if (state.currentCycle >= state.totalCycles) {
-                    NextPhaseResult(PomodoroPhase.LONG_BREAK,  config.longBreakDuration,  0,                   false)
-                } else {
+                if (state.currentCycle >= state.totalCycles)
+                    NextPhaseResult(PomodoroPhase.LONG_BREAK, config.longBreakDuration, 0, false)
+                else
                     NextPhaseResult(PomodoroPhase.SHORT_BREAK, config.shortBreakDuration, state.currentCycle + 1, false)
-                }
             }
             PomodoroPhase.LONG_BREAK ->
                 NextPhaseResult(PomodoroPhase.COMPLETE, 0, 0, true)
             else ->
                 NextPhaseResult(PomodoroPhase.FOCUS, config.focusDuration, state.currentCycle, false)
         }
-    }
 
-    // ─── DND / sound / vibration ─────────────────────────────────────────────────
-
-    private fun enableDNDIfNeeded() {
-        if (!prefs.getBoolean("enable_dnd", false)) return
-        if (systemNotificationManager.isNotificationPolicyAccessGranted) {
-            previousInterruptionFilter = systemNotificationManager.currentInterruptionFilter
-            systemNotificationManager.setInterruptionFilter(NotificationManager.INTERRUPTION_FILTER_PRIORITY)
-        }
-    }
-
-    private fun restoreDND() {
-        if (previousInterruptionFilter != null && systemNotificationManager.isNotificationPolicyAccessGranted) {
-            systemNotificationManager.setInterruptionFilter(
-                previousInterruptionFilter ?: NotificationManager.INTERRUPTION_FILTER_ALL
-            )
-            previousInterruptionFilter = null
-        }
-    }
-
-    private fun playTransitionSound() {
-        try {
-            val soundUriString = prefs.getString("pomodoro_sound", null)
-            val soundUri = if (soundUriString.isNullOrEmpty())
-                android.media.RingtoneManager.getDefaultUri(android.media.RingtoneManager.TYPE_NOTIFICATION)
-            else soundUriString.toUri()
-
-            val ringtone = android.media.RingtoneManager.getRingtone(applicationContext, soundUri)
-            ringtone?.audioAttributes = AudioAttributes.Builder()
-                .setUsage(AudioAttributes.USAGE_ALARM)
-                .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
-                .build()
-            ringtone?.play()
-        } catch (e: Exception) {
-            e.printStackTrace()
-        }
-    }
-
-    // ─── Alert notifications ─────────────────────────────────────────────────────
+    // ─── Notification titles ─────────────────────────────────────────────────────
 
     private fun getNotificationTitle(): String {
         val state = TimerStateManager.state.value
@@ -520,77 +471,98 @@ class FocusModeService : Service() {
         }
     }
 
+    // ─── DND ─────────────────────────────────────────────────────────────────────
+
+    private fun enableDNDIfNeeded() {
+        if (!prefs.getBoolean("enable_dnd", false)) return
+        if (systemNotificationManager.isNotificationPolicyAccessGranted) {
+            previousInterruptionFilter = systemNotificationManager.currentInterruptionFilter
+            systemNotificationManager.setInterruptionFilter(NotificationManager.INTERRUPTION_FILTER_PRIORITY)
+        }
+    }
+
+    private fun restoreDND() {
+        if (previousInterruptionFilter != null &&
+            systemNotificationManager.isNotificationPolicyAccessGranted) {
+            systemNotificationManager.setInterruptionFilter(
+                previousInterruptionFilter ?: NotificationManager.INTERRUPTION_FILTER_ALL
+            )
+            previousInterruptionFilter = null
+        }
+    }
+
+    // ─── Secondary notifications ─────────────────────────────────────────────────
+
     private fun showBreakEndedNotification() {
-        val notification = NotificationCompat.Builder(this, BLOCKER_CHANNEL_ID)
-            .setSmallIcon(R.drawable.ic_launcher_monochrome)
-            .setContentTitle(getString(R.string.break_ended_title))
-            .setContentText(getString(R.string.break_ended_message))
-            .setPriority(NotificationCompat.PRIORITY_HIGH)
-            .setAutoCancel(true)
-            .build()
-        notificationManager.notify(BREAK_ALERT_NOTIFICATION_ID, notification)
+        notificationManager.notify(
+            BREAK_ALERT_NOTIFICATION_ID,
+            NotificationCompat.Builder(this, BLOCKER_CHANNEL_ID)
+                .setSmallIcon(R.drawable.ic_launcher_monochrome)
+                .setContentTitle(getString(R.string.break_ended_title))
+                .setContentText(getString(R.string.break_ended_message))
+                .setPriority(NotificationCompat.PRIORITY_HIGH)
+                .setAutoCancel(true)
+                .build()
+        )
     }
 
     private fun showFocusCompleteNotification() {
-        val tapIntent = Intent(this, MainActivity::class.java).apply {
-            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
-        }
-        val tapPendingIntent = PendingIntent.getActivity(
-            this, 0, tapIntent,
-            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
-        )
-
-        val continueIntent = Intent(this, FocusModeService::class.java).apply { action = ACTION_START }
-        val continuePendingIntent = PendingIntent.getService(
-            this, 4, continueIntent,
-            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
-        )
-
-        val soundUri = try {
+        val soundUri = runCatching {
             val s = prefs.getString("pomodoro_sound", null)
             if (s.isNullOrEmpty()) android.media.RingtoneManager.getDefaultUri(android.media.RingtoneManager.TYPE_NOTIFICATION)
             else s.toUri()
-        } catch (_: Exception) {
-            android.media.RingtoneManager.getDefaultUri(android.media.RingtoneManager.TYPE_NOTIFICATION)
-        }
+        }.getOrElse { android.media.RingtoneManager.getDefaultUri(android.media.RingtoneManager.TYPE_NOTIFICATION) }
 
-        val notification = NotificationCompat.Builder(this, FOCUS_MODE_CHANNEL_ID)
-            .setSmallIcon(R.drawable.ic_launcher_monochrome)
-            .setContentTitle(getString(R.string.focus_session_complete))
-            .setContentText(getString(R.string.focus_session_complete_message))
-            .setPriority(NotificationCompat.PRIORITY_HIGH)
-            .setSound(soundUri)
-            .setAutoCancel(true)
-            .setContentIntent(tapPendingIntent)
-            .addAction(NotificationCompat.Action.Builder(
-                0, getString(R.string.notification_continue), continuePendingIntent
-            ).build())
-            .build()
+        val tapPending = PendingIntent.getActivity(
+            this, 0,
+            Intent(this, MainActivity::class.java).apply {
+                flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
+            },
+            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
+        )
+        val continuePending = PendingIntent.getService(
+            this, 4,
+            Intent(this, FocusModeService::class.java).apply { action = ACTION_START },
+            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
+        )
 
-        notificationManager.notify(COMPLETE_NOTIFICATION_ID, notification)
+        notificationManager.notify(
+            COMPLETE_NOTIFICATION_ID,
+            NotificationCompat.Builder(this, FOCUS_MODE_CHANNEL_ID)
+                .setSmallIcon(R.drawable.ic_launcher_monochrome)
+                .setContentTitle(getString(R.string.focus_session_complete))
+                .setContentText(getString(R.string.focus_session_complete_message))
+                .setPriority(NotificationCompat.PRIORITY_HIGH)
+                .setSound(soundUri)
+                .setAutoCancel(true)
+                .setContentIntent(tapPending)
+                .addAction(NotificationCompat.Action.Builder(0, getString(R.string.notification_continue), continuePending).build())
+                .build()
+        )
     }
 
-    // ─── Lifecycle ────────────────────────────────────────────────────────────────
+    // ─── Sound ───────────────────────────────────────────────────────────────────
 
-    override fun onBind(intent: Intent): IBinder? = null
-
-    override fun onDestroy() {
-        super.onDestroy()
-        countDownTimer?.cancel()
-        stopForeground(STOP_FOREGROUND_REMOVE)
-        notificationManager.cancel(NOTIFICATION_ID)
-        restoreDND()
-
-        if (FocusStats.activeSession != null) FocusStats.endSession(isCompleted = false)
-
-        prefs.edit { putBoolean("focus_mode", false) }
-        TimerStateManager.reset()
+    private fun playTransitionSound() {
+        try {
+            val uri = prefs.getString("pomodoro_sound", null).let { s ->
+                if (s.isNullOrEmpty()) android.media.RingtoneManager.getDefaultUri(android.media.RingtoneManager.TYPE_NOTIFICATION)
+                else s.toUri()
+            }
+            android.media.RingtoneManager.getRingtone(applicationContext, uri)?.apply {
+                audioAttributes = AudioAttributes.Builder()
+                    .setUsage(AudioAttributes.USAGE_ALARM)
+                    .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
+                    .build()
+                play()
+            }
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
     }
 }
 
 fun formatTime(millis: Long): String {
     val totalSeconds = millis / 1000
-    val minutes = totalSeconds / 60
-    val seconds = totalSeconds % 60
-    return String.format(Locale.getDefault(), "%02d:%02d", minutes, seconds)
+    return String.format(Locale.getDefault(), "%02d:%02d", totalSeconds / 60, totalSeconds % 60)
 }

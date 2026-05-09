@@ -18,6 +18,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Stable
@@ -38,8 +39,8 @@ data class WhitelistedApp(
     val label: String,
     val icon: ImageBitmap,
     val isWhitelisted: Boolean,
-    val isSystemApp: Boolean = false,
-    val user: UserHandle
+    val user: UserHandle,
+    val isSystemApp: Boolean = false
 )
 
 sealed interface AllowedAppsState {
@@ -55,8 +56,8 @@ fun WhitelistScreen(
     searchQuery: String,
     onSearchQueryChange: (String) -> Unit,
     onToggle: (WhitelistedApp) -> Unit,
-    hideSystemApps: Boolean = false,
-    onHideSystemAppsChange: (Boolean) -> Unit = {},
+    hideSystemApps: Boolean = true,
+    onToggleHideSystemApps: () -> Unit = {},
 ) {
     val scrollBehavior =
         TopAppBarDefaults.exitUntilCollapsedScrollBehavior(rememberTopAppBarState())
@@ -75,24 +76,6 @@ fun WhitelistScreen(
                             Icon(
                                 Icons.AutoMirrored.Rounded.ArrowBack,
                                 contentDescription = stringResource(R.string.back)
-                            )
-                        }
-                    },
-                    actions = {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            modifier = Modifier.padding(end = 8.dp)
-                        ) {
-                            Text(
-                                text = "Hide system",
-                                style = MaterialTheme.typography.labelMedium,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                            Spacer(Modifier.width(4.dp))
-                            Switch(
-                                checked = hideSystemApps,
-                                onCheckedChange = onHideSystemAppsChange,
-                                modifier = Modifier.height(24.dp)
                             )
                         }
                     },
@@ -134,6 +117,24 @@ fun WhitelistScreen(
                         unfocusedContainerColor = Color.Transparent,
                     )
                 )
+
+                // ── Filter chip row ────────────────────────────────────────────
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp)
+                        .padding(bottom = 4.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    FilterChip(
+                        selected = hideSystemApps,
+                        onClick = onToggleHideSystemApps,
+                        label = { Text(stringResource(R.string.hide_system_apps)) },
+                        leadingIcon = if (hideSystemApps) {
+                            { Icon(Icons.Rounded.Check, contentDescription = null, modifier = Modifier.size(16.dp)) }
+                        } else null
+                    )
+                }
             }
         }
     ) { paddingValues ->

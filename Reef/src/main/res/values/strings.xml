@@ -398,6 +398,11 @@
 
     <!-- App Blocker Service (UsageStats-based) -->
     <string name="blocker_service_running">Monitoring apps in background</string>
+    <string name="app_blocker_channel_name">App Blocker</string>
+    <string name="app_blocker_channel_description">Silent background notification required to keep the app blocker running</string>
+
+    <!-- FocusModeService paused state -->
+    <string name="paused_time">Paused — %1$s remaining</string>
 
     <!-- BlockedActivity -->
     <string name="go_home">Go Home</string>
@@ -407,6 +412,8 @@
     <string name="grant_optional">Grant (Optional)</string>
     <string name="accessibility_service_website_only_description">Only needed for website / browser blocking. App blocking now works without this permission. On Xiaomi devices you can skip this if you don\'t use website limits.</string>
 
+
+    <string name="hide_system_apps">Hide system apps</string>
 
     <string name="nav_home">Home</string>
     <string name="nav_stats">Stats</string>

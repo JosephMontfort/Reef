@@ -21,19 +21,16 @@ class WhitelistViewModel(
 ) : ViewModel() {
 
     private val _uiState = mutableStateOf<AllowedAppsState>(AllowedAppsState.Loading)
-    private var allApps = listOf<WhitelistedApp>()
-
     private val _searchQuery = mutableStateOf("")
-    val searchQuery: State<String> = _searchQuery
-
-    private val _hideSystemApps = mutableStateOf(false)
-    val hideSystemApps: State<Boolean> = _hideSystemApps
+    private val _hideSystemApps = mutableStateOf(true)
 
     val uiState: State<AllowedAppsState> = _uiState
+    val searchQuery: State<String> = _searchQuery
+    val hideSystemApps: State<Boolean> = _hideSystemApps
 
-    init {
-        loadApps()
-    }
+    private var allApps = listOf<WhitelistedApp>()
+
+    init { loadApps() }
 
     private fun loadApps() {
         viewModelScope.launch {
@@ -57,15 +54,18 @@ class WhitelistViewModel(
                         .distinctBy { it.packageName }
                         .filter { it.packageName != currentPackageName }
                         .map { appInfo ->
-                            val originalIcon = appInfo.loadIcon(packageManager)
-                            val badgedIcon = packageManager.getUserBadgedIcon(originalIcon, userHandle)
+                            val badgedIcon = packageManager.getUserBadgedIcon(
+                                appInfo.loadIcon(packageManager), userHandle
+                            )
+                            val isSystem = (appInfo.flags and ApplicationInfo.FLAG_SYSTEM) != 0
+
                             WhitelistedApp(
                                 packageName = appInfo.packageName,
-                                label       = appInfo.loadLabel(packageManager).toString(),
-                                icon        = badgedIcon.toBitmap().asImageBitmap(),
+                                label = appInfo.loadLabel(packageManager).toString(),
+                                icon = badgedIcon.toBitmap().asImageBitmap(),
                                 isWhitelisted = Whitelist.isWhitelisted(appInfo.packageName),
-                                isSystemApp = (appInfo.flags and ApplicationInfo.FLAG_SYSTEM) != 0,
-                                user        = userHandle
+                                user = userHandle,
+                                isSystemApp = isSystem
                             )
                         }
                     allAppsList.addAll(combined)
@@ -82,20 +82,22 @@ class WhitelistViewModel(
         updateFilteredList()
     }
 
-    fun onHideSystemAppsChange(hide: Boolean) {
-        _hideSystemApps.value = hide
+    fun toggleHideSystemApps() {
+        _hideSystemApps.value = !_hideSystemApps.value
         updateFilteredList()
     }
 
     private fun updateFilteredList() {
-        val query  = _searchQuery.value
-        val hideSystem = _hideSystemApps.value
+        val query = _searchQuery.value
+        val hide = _hideSystemApps.value
         val filtered = allApps
-            .filter { app -> !hideSystem || !app.isSystemApp }
-            .filter { app ->
-                query.isEmpty() ||
-                app.label.contains(query, ignoreCase = true) ||
-                app.packageName.contains(query, ignoreCase = true)
+            .filter { app -> !hide || !app.isSystemApp }
+            .let { list ->
+                if (query.isEmpty()) list
+                else list.filter {
+                    it.label.contains(query, ignoreCase = true) ||
+                            it.packageName.contains(query, ignoreCase = true)
+                }
             }
         _uiState.value = AllowedAppsState.Success(filtered)
     }
@@ -103,10 +105,9 @@ class WhitelistViewModel(
     fun toggleWhitelist(app: WhitelistedApp) {
         if (app.isWhitelisted) Whitelist.unwhitelist(app.packageName)
         else Whitelist.whitelist(app.packageName)
-
         allApps = allApps.map {
-            if (it.packageName == app.packageName && it.user == app.user) it.copy(isWhitelisted = !it.isWhitelisted)
-            else it
+            if (it.packageName == app.packageName && it.user == app.user)
+                it.copy(isWhitelisted = !it.isWhitelisted) else it
         }
         updateFilteredList()
     }

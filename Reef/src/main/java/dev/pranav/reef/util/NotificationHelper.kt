@@ -28,7 +28,18 @@ object NotificationHelper {
 
         notificationManager.createNotificationChannel(
             NotificationChannel(
-                BLOCKER_CHANNEL_ID,
+                APP_BLOCKER_SERVICE_CHANNEL_ID,
+                getString(R.string.app_blocker_channel_name),
+                NotificationManager.IMPORTANCE_MIN
+            ).apply {
+                description = getString(R.string.app_blocker_channel_description)
+                setShowBadge(false)
+                setSound(null, null)
+                enableLights(false)
+                enableVibration(false)
+            }
+        )
+        notificationManager.createNotificationChannel(
                 getString(R.string.blocker_channel_name),
                 NotificationManager.IMPORTANCE_HIGH
             ).apply {

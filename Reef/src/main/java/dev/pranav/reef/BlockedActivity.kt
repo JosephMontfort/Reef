@@ -1,9 +1,11 @@
 package dev.pranav.reef
 
 import android.content.Intent
+import android.os.Build
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
+import android.view.WindowManager
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.layout.*
@@ -32,32 +34,55 @@ class BlockedActivity : ComponentActivity() {
         applyDefaults()
         super.onCreate(savedInstanceState)
 
-        val blockedPkg = intent.getStringExtra(EXTRA_BLOCKED_PKG) ?: ""
-        val reasonStr = intent.getStringExtra(EXTRA_BLOCK_REASON) ?: ""
-        val reason = runCatching {
-            UsageTracker.BlockReason.valueOf(reasonStr)
-        }.getOrDefault(UsageTracker.BlockReason.DAILY_LIMIT)
+        // ── Window flags for reliable display on MIUI/HyperOS ──────────────────
+        // Keep screen on and allow display over the lock screen.
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O_MR1) {
+            setShowWhenLocked(true)
+            setTurnScreenOn(true)
+        }
+        window.addFlags(
+            WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON or
+            WindowManager.LayoutParams.FLAG_DISMISS_KEYGUARD or
+            // FLAG_SHOW_WHEN_LOCKED is deprecated but kept for pre-27 MIUI which
+            // ignores the Activity API above.
+            @Suppress("DEPRECATION")
+            WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED or
+            WindowManager.LayoutParams.FLAG_TURN_SCREEN_ON
+        )
 
-        // Auto-navigate home after 1.5 s so the user isn't stranded
-        handler.postDelayed({ goHome() }, 1500)
+        val blockedPkg = intent.getStringExtra(EXTRA_BLOCKED_PKG) ?: ""
+        val reasonStr  = intent.getStringExtra(EXTRA_BLOCK_REASON) ?: ""
+        val reason = runCatching { UsageTracker.BlockReason.valueOf(reasonStr) }
+            .getOrDefault(UsageTracker.BlockReason.DAILY_LIMIT)
+
+        // Auto-send user home after showing the screen briefly.
+        handler.postDelayed({ goHome() }, 1_500)
 
         setContent {
             ReefTheme {
                 BlockedScreen(
                     packageName = blockedPkg,
                     reason = reason,
-                    onGoHome = { goHome() }
+                    onGoHome = ::goHome
                 )
             }
         }
     }
 
+    override fun onNewIntent(intent: Intent) {
+        // singleTask: re-arm the auto-home timer if a new block arrives
+        super.onNewIntent(intent)
+        handler.removeCallbacksAndMessages(null)
+        handler.postDelayed({ goHome() }, 1_500)
+    }
+
     private fun goHome() {
-        val homeIntent = Intent(Intent.ACTION_MAIN).apply {
-            addCategory(Intent.CATEGORY_HOME)
-            flags = Intent.FLAG_ACTIVITY_NEW_TASK
-        }
-        startActivity(homeIntent)
+        startActivity(
+            Intent(Intent.ACTION_MAIN).apply {
+                addCategory(Intent.CATEGORY_HOME)
+                flags = Intent.FLAG_ACTIVITY_NEW_TASK
+            }
+        )
         finish()
     }
 
@@ -66,11 +91,8 @@ class BlockedActivity : ComponentActivity() {
         handler.removeCallbacksAndMessages(null)
     }
 
-    // Prevent back-gesture from returning to the blocked app
     @Deprecated("Overridden to prevent returning to blocked app")
-    override fun onBackPressed() {
-        goHome()
-    }
+    override fun onBackPressed() = goHome()
 }
 
 @Composable
@@ -99,17 +121,14 @@ fun BlockedScreen(
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.Center
         ) {
-            Text(
-                text = "⏱",
-                style = MaterialTheme.typography.displayLarge
-            )
-            Spacer(modifier = Modifier.height(24.dp))
+            Text(text = "⏱", style = MaterialTheme.typography.displayLarge)
+            Spacer(Modifier.height(24.dp))
             Text(
                 text = stringResource(R.string.app_blocked),
                 style = MaterialTheme.typography.headlineMedium,
                 textAlign = TextAlign.Center
             )
-            Spacer(modifier = Modifier.height(12.dp))
+            Spacer(Modifier.height(12.dp))
             val message = when (reason) {
                 UsageTracker.BlockReason.ROUTINE_LIMIT ->
                     stringResource(R.string.blocked_by_routine, appName)
@@ -122,7 +141,7 @@ fun BlockedScreen(
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 textAlign = TextAlign.Center
             )
-            Spacer(modifier = Modifier.height(36.dp))
+            Spacer(Modifier.height(36.dp))
             Button(onClick = onGoHome) {
                 Text(stringResource(R.string.go_home))
             }
