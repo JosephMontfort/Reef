@@ -368,17 +368,22 @@ class FocusModeService : Service() {
         }
 
         return notificationBuilder!!.apply {
-            val collapsedText = if (endTimeMillis > 0) text else title
-            val expandedText = if (endTimeMillis > 0) title else text
-            setContentTitle(collapsedText)
-            setContentText(expandedText)
-            setSubText(expandedText)
+            val remainingMillis = if (endTimeMillis > 0) {
+                (endTimeMillis - System.currentTimeMillis()).coerceAtLeast(0L)
+            } else {
+                TimerStateManager.state.value.timeRemaining
+            }
+            val timerOnly = formatTime(remainingMillis)
+            val expandedLabel = getString(R.string.time_remaining, timerOnly)
 
-            // Live countdown: delegate to the system Chronometer widget.
-            // setWhen(endTimeMillis) + setUsesChronometer(true) + count-down flag
-            // lets Android render "MM:SS" natively — no app-side ticking needed.
+            // Compact view: timer only.
+            // Expanded view: keep the label.
+            setContentTitle(if (endTimeMillis > 0) timerOnly else title)
+            setContentText(if (endTimeMillis > 0) title else text)
+            setSubText(if (endTimeMillis > 0) expandedLabel else text)
+
+            // Live countdown handled by the system, not per-second app updates.
             if (endTimeMillis > 0) {
-                // Use wall-clock time directly for notification chronometer
                 setWhen(endTimeMillis)
                 setUsesChronometer(true)
                 setChronometerCountDown(true)
