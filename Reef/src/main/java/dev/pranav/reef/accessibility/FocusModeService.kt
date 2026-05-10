@@ -305,20 +305,14 @@ class FocusModeService : Service() {
                 .setForegroundServiceBehavior(NotificationCompat.FOREGROUND_SERVICE_IMMEDIATE)
         }
 
-        // ── Chronometer: let the OS count down live in the notification ──────
-        // When running: anchor setWhen to the future finish time so the system
-        //   displays a live countdown automatically.
-        // When paused:  disable chronometer and show the static remaining time.
         notificationBuilder!!.apply {
             setContentTitle(title)
 
             if (isRunning) {
-                // CRUCIAL: HyperOS and Dynamic Islands require the native chronometer to be enabled.
                 setUsesChronometer(true)
                 setChronometerCountDown(true)
                 setWhen(System.currentTimeMillis() + timeLeft)
                 
-                // Clear custom layouts so the OS can parse the notification cleanly for Live Alerts
                 setCustomContentView(null)
                 setCustomBigContentView(null)
                 setStyle(null)
@@ -333,12 +327,10 @@ class FocusModeService : Service() {
                 setStyle(null)
                 
                 setContentText(getString(R.string.paused_time, "${TimeUnit.MILLISECONDS.toMinutes(timeLeft)} m"))
-            } m"))
             }
 
-            // Dynamic-island / promoted chip: show remaining minutes
             val chipMin = TimeUnit.MILLISECONDS.toMinutes(timeLeft)
-            setShortCriticalText(if (chipMin > 0) "${chipMin}m" else "<1m")
+            setSubText(if (chipMin > 0) "${chipMin}m" else "<1m")
 
             clearActions()
 
