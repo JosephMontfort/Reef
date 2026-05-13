@@ -55,6 +55,7 @@ import dev.pranav.reef.ui.focusstats.FocusStatsScreen
 import dev.pranav.reef.util.*
 
 class MainActivity: ComponentActivity() {
+    private var pendingFocusModeStart = false
     private var hasCheckedPermissions = false
     private var shouldNavigateToTimer = false
 
@@ -308,7 +309,7 @@ class MainActivity: ComponentActivity() {
                                         )
                                     )
                                 },
-                                onRequestAccessibility = { /* accessibility no longer required for focus mode */ },
+                                onRequestAccessibility = { /* no-op: accessibility no longer required for focus */ },
                                 currentTimeLeft = currentTimeLeft,
                                 currentTimerState = currentTimerState,
                                 whitelistedAppsCount = whitelistedCount,
@@ -487,7 +488,6 @@ class MainActivity: ComponentActivity() {
                 putBoolean("pomodoro_mode", false)
                 putLong("focus_time", config.minutes * 60 * 1000L)
                 putBoolean("strict_mode", config.strictMode)
-                putBoolean("block_home_screen", config.blockHomeScreen)
             }
 
             is TimerConfig.Pomodoro -> prefs.edit {
@@ -501,7 +501,6 @@ class MainActivity: ComponentActivity() {
                 putInt("pomodoro_current_cycle", 1)
                 putString("pomodoro_state", "FOCUS")
                 putBoolean("strict_mode", config.strictMode)
-                putBoolean("block_home_screen", config.blockHomeScreen)
             }
         }
         startForegroundService(Intent(this, FocusModeService::class.java).apply {
