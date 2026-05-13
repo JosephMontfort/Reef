@@ -50,6 +50,13 @@ class BlockedActivity : ComponentActivity() {
 
     private val handler = Handler(Looper.getMainLooper())
 
+    /**
+     * Set to true right before we intentionally launch a whitelisted app from the
+     * overlay grid.  This prevents [onUserLeaveHint] from re-showing the overlay
+     * (which it must do for every other leave-hint, e.g. the user pressing Home).
+     */
+    private var isLaunchingWhitelisted = false
+
     private val isHomeBlockMode
         get() = prefs.getBoolean("block_home_screen", false) &&
                 prefs.getBoolean("focus_mode", false)
@@ -95,7 +102,14 @@ class BlockedActivity : ComponentActivity() {
         setContent {
             ReefTheme {
                 if (isHomeBlockMode) {
-                    HomeBlockScreen()
+                    HomeBlockScreen(
+                        onLaunchApp = { launchIntent ->
+                            // Flag must be set BEFORE startActivity so that
+                            // onUserLeaveHint sees it and skips the relaunch.
+                            isLaunchingWhitelisted = true
+                            runCatching { startActivity(launchIntent) }
+                        }
+                    )
                 } else {
                     BlockedScreen(
                         packageName = blockedPkg,
@@ -123,6 +137,37 @@ class BlockedActivity : ComponentActivity() {
             handler.removeCallbacksAndMessages(null)
             handler.postDelayed({ goHome() }, 1_500)
         }
+    }
+
+    /**
+     * Called when the activity is about to go to the background due to a
+     * *user* action (Home button, Recents, etc.).
+     *
+     * In home-block mode we immediately re-show the overlay so the user never
+     * actually sees the home screen / launcher.  The only exception is when the
+     * user tapped a whitelisted app from our grid — [isLaunchingWhitelisted]
+     * is true in that case and we let the chosen app come to front normally.
+     */
+    override fun onUserLeaveHint() {
+        super.onUserLeaveHint()
+        if (isHomeBlockMode && !isLaunchingWhitelisted) {
+            // Post to next looper frame so the relaunch happens right after
+            // Android finishes processing the home-press gesture.
+            handler.post {
+                if (!isFinishing) {
+                    startActivity(
+                        Intent(this, BlockedActivity::class.java).apply {
+                            // singleTask launch mode ensures the existing instance
+                            // is reused (onNewIntent called); NO_ANIMATION prevents
+                            // a visible flash of the home screen.
+                            addFlags(Intent.FLAG_ACTIVITY_NO_ANIMATION)
+                        }
+                    )
+                }
+            }
+        }
+        // Always clear the flag after the leave-hint is processed.
+        isLaunchingWhitelisted = false
     }
 
     private fun goHome() {
@@ -156,7 +201,7 @@ data class AllowedApp(
 )
 
 @Composable
-fun HomeBlockScreen() {
+fun HomeBlockScreen(onLaunchApp: (Intent) -> Unit) {
     val context = LocalContext.current
     var allowedApps by remember { mutableStateOf<List<AllowedApp>>(emptyList()) }
 
@@ -223,7 +268,7 @@ fun HomeBlockScreen() {
                             val launchIntent =
                                 context.packageManager.getLaunchIntentForPackage(app.packageName)
                                     ?.apply { addFlags(Intent.FLAG_ACTIVITY_NEW_TASK) }
-                            if (launchIntent != null) context.startActivity(launchIntent)
+                            if (launchIntent != null) onLaunchApp(launchIntent)
                         }
                     }
                 }
