@@ -33,34 +33,31 @@ jobs:
       - name: Install rclone
         run: curl https://rclone.org/install.sh | sudo bash
 
-      - name: Configure rclone
+      - name: Write Google service account file
         run: |
           mkdir -p ~/.config/rclone
-
+          printf '%s' '${{ secrets.GDRIVE_SERVICE_ACCOUNT_JSON }}' > /tmp/gdrive-sa.json
           cat > ~/.config/rclone/rclone.conf <<EOF
           [gdrive]
           type = drive
           scope = drive
-          service_account_credentials = ${GDRIVE_SERVICE_ACCOUNT_JSON}
+          service_account_file = /tmp/gdrive-sa.json
           EOF
-        env:
-          GDRIVE_SERVICE_ACCOUNT_JSON: ${{ secrets.GDRIVE_SERVICE_ACCOUNT_JSON }}
 
       - name: Get next build number
         id: buildnum
         run: |
           COUNT=$(rclone lsf gdrive:${{ secrets.GDRIVE_FOLDER_ID }} --files-only | wc -l)
           NEXT=$((COUNT + 1))
-          echo "build=$NEXT" >> $GITHUB_OUTPUT
+          echo "build=$NEXT" >> "$GITHUB_OUTPUT"
 
       - name: Rename APK
         run: |
           APK=$(find Reef/build/outputs/apk/release -name "*.apk" | head -n 1)
-
           cp "$APK" "Reef-v${{ steps.buildnum.outputs.build }}.apk"
 
       - name: Upload APK to Google Drive
         run: |
           rclone copy "Reef-v${{ steps.buildnum.outputs.build }}.apk" \
-          gdrive:${{ secrets.GDRIVE_FOLDER_ID }} \
-          --progress
+            gdrive:${{ secrets.GDRIVE_FOLDER_ID }} \
+            --progress
