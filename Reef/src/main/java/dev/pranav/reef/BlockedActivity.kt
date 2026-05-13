@@ -165,7 +165,7 @@ fun HomeBlockScreen() {
             val pm = context.packageManager
             val launcherApps =
                 context.getSystemService(Context.LAUNCHER_APPS_SERVICE) as LauncherApps
-            launcherApps.getActivityList(null, Process.myUserHandle())
+            launcherApps.getActivityList(null, Process.myUserHandle()).distinctBy { it.applicationInfo.packageName }
                 .mapNotNull { info ->
                     val pkg = info.applicationInfo.packageName
                     if (!Whitelist.isWhitelisted(pkg) || pkg == context.packageName) return@mapNotNull null
