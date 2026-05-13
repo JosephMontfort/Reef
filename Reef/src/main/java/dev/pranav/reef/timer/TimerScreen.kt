@@ -220,6 +220,7 @@ fun SimpleFocusSetup(onStart: (TimerConfig) -> Unit) {
     var hours by remember { mutableIntStateOf(0) }
     var minutes by remember { mutableIntStateOf(30) }
     var isStrictMode by remember { mutableStateOf(false) }
+    var isBlockHomeScreen by remember { mutableStateOf(false) }
 
     val totalMinutes = hours * 60 + minutes
 
@@ -408,10 +409,34 @@ fun SimpleFocusSetup(onStart: (TimerConfig) -> Unit) {
                 label = { Text(stringResource(R.string.hour_min_short_suffix, 1, 30, 30)) })
         }
 
+        
+        Spacer(modifier = Modifier.height(16.dp))
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = "Block Home Screen",
+                    style = MaterialTheme.typography.titleMedium,
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+                Text(
+                    text = "Prevents going to home screen during focus",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+            Switch(
+                checked = isBlockHomeScreen,
+                onCheckedChange = { isBlockHomeScreen = it }
+            )
+        }
         Spacer(modifier = Modifier.height(32.dp))
 
         Button(
-            onClick = { onStart(TimerConfig.Simple(totalMinutes, isStrictMode)) },
+            onClick = { onStart(TimerConfig.Simple(totalMinutes, isStrictMode, isBlockHomeScreen)) },
             modifier = Modifier.fillMaxWidth(),
             enabled = totalMinutes > 0,
             shapes = ButtonDefaults.shapes(pressedShape = ButtonDefaults.pressedShape),
@@ -452,6 +477,7 @@ fun PomodoroFocusSetup(onStart: (TimerConfig) -> Unit) {
         mutableIntStateOf(prefs.getInt("pomodoro_cycles", 4))
     }
     var isStrictMode by remember { mutableStateOf(false) }
+    var isBlockHomeScreen by remember { mutableStateOf(false) }
 
     Column(
         modifier = Modifier
@@ -511,6 +537,30 @@ fun PomodoroFocusSetup(onStart: (TimerConfig) -> Unit) {
             }
         }
 
+        
+        Spacer(modifier = Modifier.height(16.dp))
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = "Block Home Screen",
+                    style = MaterialTheme.typography.titleMedium,
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+                Text(
+                    text = "Prevents going to home screen during focus",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+            Switch(
+                checked = isBlockHomeScreen,
+                onCheckedChange = { isBlockHomeScreen = it }
+            )
+        }
         Spacer(modifier = Modifier.height(32.dp))
 
         Row(
@@ -557,13 +607,10 @@ fun PomodoroFocusSetup(onStart: (TimerConfig) -> Unit) {
         Button(
             onClick = {
                 onStart(
-                    TimerConfig.Pomodoro(
-                        focusMinutes,
+                    TimerConfig.Pomodoro(focusMinutes,
                         shortBreakMinutes,
                         longBreakMinutes,
-                        cycles,
-                        isStrictMode
-                    )
+                        cycles, isStrictMode, isBlockHomeScreen)
                 )
             },
             modifier = Modifier.fillMaxWidth(),
