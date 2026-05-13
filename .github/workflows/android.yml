@@ -2,7 +2,6 @@ name: Android CI
 
 on:
   push:
-  pull_request:
   workflow_dispatch:
 
 jobs:
@@ -11,34 +10,57 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4.2.2
+        uses: actions/checkout@v4
 
       - name: Set up JDK 21
-        uses: actions/setup-java@v4.7.1
+        uses: actions/setup-java@v4
         with:
-          distribution: 'temurin'
-          java-version: '21'
+          distribution: temurin
+          java-version: 21
 
-      - name: Give permission to executable
+      - name: Grant execute permission
         run: chmod +x gradlew
 
       - name: Setup Android SDK
-        uses: android-actions/setup-android@v3.2.2
+        uses: android-actions/setup-android@v3
 
       - name: Setup Gradle
-        uses: gradle/actions/setup-gradle@v4.4.1
+        uses: gradle/actions/setup-gradle@v4
 
-      - name: Build with gradle
-        run: ./gradlew clean assemble
+      - name: Build Release APK
+        run: ./gradlew clean assembleRelease
 
-      - name: Upload debug apks
-        uses: actions/upload-artifact@v4.6.2
-        with:
-          name: app-debug
-          path: Reef/build/outputs/apk/debug
+      - name: Install rclone
+        run: curl https://rclone.org/install.sh | sudo bash
 
-      - name: Upload release apks
-        uses: actions/upload-artifact@v4.6.2
-        with:
-          name: app-release
-          path: Reef/build/outputs/apk/release
+      - name: Configure rclone
+        run: |
+          mkdir -p ~/.config/rclone
+
+          cat > ~/.config/rclone/rclone.conf <<EOF
+          [gdrive]
+          type = drive
+          scope = drive
+          service_account_credentials = ${GDRIVE_SERVICE_ACCOUNT_JSON}
+          EOF
+        env:
+          GDRIVE_SERVICE_ACCOUNT_JSON: ${{ secrets.GDRIVE_SERVICE_ACCOUNT_JSON }}
+
+      - name: Get next build number
+        id: buildnum
+        run: |
+          COUNT=$(rclone lsf gdrive:${{ secrets.GDRIVE_FOLDER_ID }} --files-only | wc -l)
+          NEXT=$((COUNT + 1))
+          echo "build=$NEXT" >> $GITHUB_OUTPUT
+
+      - name: Rename APK
+        run: |
+          APK=$(find Reef/build/outputs/apk/release -name "*.apk" | head -n 1)
+
+          cp "$APK" "Reef-v${{ steps.buildnum.outputs.build }}.apk"
+
+      - name: Upload APK to Google Drive
+        run: |
+          rclone copy "Reef-v${{ steps.buildnum.outputs.build }}.apk" \
+          gdrive:${{ secrets.GDRIVE_FOLDER_ID }} \
+          --progress
