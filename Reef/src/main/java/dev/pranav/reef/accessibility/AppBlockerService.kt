@@ -19,11 +19,11 @@ import dev.pranav.reef.BlockedActivity
 import dev.pranav.reef.R
 import dev.pranav.reef.scheduleWatcher
 import dev.pranav.reef.services.routines.RoutineSessionManager
-import dev.pranav.reef.util.APP_BLOCKER_SERVICE_CHANNEL_ID
 import dev.pranav.reef.util.FocusStats
 import dev.pranav.reef.util.NotificationHelper.createNotificationChannel
 import dev.pranav.reef.util.NotificationHelper.syncRoutineNotification
 import dev.pranav.reef.util.Whitelist
+import dev.pranav.reef.util.BLOCKER_CHANNEL_ID
 import dev.pranav.reef.util.isPrefsInitialized
 import dev.pranav.reef.util.prefs
 
@@ -32,11 +32,10 @@ class AppBlockerService : android.app.Service() {
     private val handler = Handler(Looper.getMainLooper())
     private var keyguardManager: KeyguardManager? = null
     private var isScreenOn = true
-    private var defaultLauncherPkg: String? = null
 
-    // Track block state per pkg: timestamp + retry count
-    private data class BlockAttempt(val time: Long, val retries: Int)
-    private val blockAttempts = mutableMapOf<String, BlockAttempt>()
+    // Per-package cooldown to avoid spam-launching BlockedActivity when UsageStats
+    // events lag slightly behind the actual foreground switch.
+    private val lastBlockedTime = mutableMapOf<String, Long>()
 
     private val screenReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
@@ -47,6 +46,7 @@ class AppBlockerService : android.app.Service() {
         }
     }
 
+    // App-blocking poll — runs every second.
     private val appPollRunnable = object : Runnable {
         override fun run() {
             try {
@@ -60,6 +60,7 @@ class AppBlockerService : android.app.Service() {
         }
     }
 
+    // Routine sync poll — runs every 30 seconds.
     private val routinePollRunnable = object : Runnable {
         override fun run() {
             try {
@@ -74,17 +75,14 @@ class AppBlockerService : android.app.Service() {
 
     override fun onCreate() {
         super.onCreate()
+
         if (!isPrefsInitialized) {
-            prefs = createDeviceProtectedStorageContext()
-                .getSharedPreferences("prefs", MODE_PRIVATE)
+            val deviceContext = createDeviceProtectedStorageContext()
+            prefs = deviceContext.getSharedPreferences("prefs", MODE_PRIVATE)
         }
+
         keyguardManager = getSystemService(KEYGUARD_SERVICE) as KeyguardManager
         createNotificationChannel()
-
-        // Cache default launcher package for home-block mode
-        defaultLauncherPkg = packageManager.resolveActivity(
-            Intent(Intent.ACTION_MAIN).apply { addCategory(Intent.CATEGORY_HOME) }, 0
-        )?.activityInfo?.packageName
 
         val filter = IntentFilter().apply {
             addAction(Intent.ACTION_SCREEN_OFF)
@@ -96,6 +94,8 @@ class AppBlockerService : android.app.Service() {
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         promoteToForeground()
+        // Re-posting is safe; Handler deduplicates identical Runnable references only
+        // when using removeCallbacks first, so remove before re-posting to avoid stacking.
         handler.removeCallbacks(appPollRunnable)
         handler.removeCallbacks(routinePollRunnable)
         handler.post(appPollRunnable)
@@ -105,7 +105,7 @@ class AppBlockerService : android.app.Service() {
     }
 
     private fun promoteToForeground() {
-        val notification = NotificationCompat.Builder(this, APP_BLOCKER_SERVICE_CHANNEL_ID)
+        val notification = NotificationCompat.Builder(this, BLOCKER_CHANNEL_ID)
             .setSmallIcon(R.drawable.ic_launcher_foreground)
             .setContentTitle(getString(R.string.app_name))
             .setContentText(getString(R.string.blocker_service_running))
@@ -121,6 +121,11 @@ class AppBlockerService : android.app.Service() {
         ServiceCompat.startForeground(this, NOTIFICATION_ID, notification, foregroundServiceType)
     }
 
+    /**
+     * Reads the most recent MOVE_TO_FOREGROUND event from UsageStats within the last
+     * [EVENT_WINDOW_MS] ms. Returns null if usage-stats permission is not granted or
+     * no event is found in the window.
+     */
     private fun getCurrentForegroundApp(): String? {
         val usm = getSystemService(Context.USAGE_STATS_SERVICE) as UsageStatsManager
         val now = System.currentTimeMillis()
@@ -138,89 +143,44 @@ class AppBlockerService : android.app.Service() {
 
     private fun checkForegroundApp() {
         val pkg = getCurrentForegroundApp() ?: return
-        if (pkg == packageName) return  // Always allow Reef itself
+
+        // Skip our own package (e.g. BlockedActivity is in foreground)
+        if (pkg == packageName) return
 
         val now = System.currentTimeMillis()
-        val focusMode = prefs.getBoolean("focus_mode", false)
-        val blockHomeScreen = prefs.getBoolean("block_home_screen", false)
 
-        // ── Home-block mode: persistent overlay for all non-whitelisted (incl. launcher) ──
-        if (focusMode && blockHomeScreen) {
-            val isAllowed = Whitelist.isWhitelisted(pkg) && pkg != defaultLauncherPkg
-            if (isAllowed) {
-                // Whitelisted non-launcher app opened — dismiss overlay
-                if (BlockedActivity.isShowing) {
-                    sendBroadcast(Intent(BlockedActivity.ACTION_DISMISS).apply { setPackage(packageName) })
-                }
-                blockAttempts.remove(pkg)
-            } else if (!BlockedActivity.isShowing) {
-                triggerBlock(pkg, UsageTracker.BlockReason.ROUTINE_LIMIT, now)
-            }
-            return
-        }
+        // Per-package cooldown prevents spam when UsageStats lags behind the real switch
+        val lastTime = lastBlockedTime[pkg] ?: 0L
+        if (now - lastTime < BLOCK_COOLDOWN_MS) return
 
-        // ── Normal focus mode: block non-whitelisted apps ──
-        val attempt = blockAttempts[pkg]
-        if (attempt != null && (now - attempt.time) < BLOCK_COOLDOWN_MS && attempt.retries == 0) return
-
-        if (focusMode) {
+        // Focus mode: block everything not whitelisted
+        if (prefs.getBoolean("focus_mode", false)) {
             if (!Whitelist.isWhitelisted(pkg)) {
                 FocusStats.recordBlockEvent(pkg, "focus_mode")
-                triggerBlock(pkg, UsageTracker.BlockReason.ROUTINE_LIMIT, now)
+                lastBlockedTime[pkg] = now
+                launchBlockedActivity(pkg, UsageTracker.BlockReason.ROUTINE_LIMIT)
                 return
             }
         }
 
+        // Daily-limit / routine-limit check
         val blockReason = UsageTracker.checkBlockReason(this, pkg)
         if (blockReason != UsageTracker.BlockReason.NONE) {
-            triggerBlock(pkg, blockReason, now)
-        } else {
-            blockAttempts.remove(pkg)
-        }
-    }
-
-    private fun triggerBlock(pkg: String, reason: UsageTracker.BlockReason, now: Long) {
-        val existing = blockAttempts[pkg]
-        val retries = existing?.retries ?: 0
-
-        if (retries > MAX_RETRIES) return
-
-        Log.d(TAG, "Blocking $pkg reason=$reason retry=$retries")
-        blockAttempts[pkg] = BlockAttempt(now, retries)
-        launchBlockedActivity(pkg, reason)
-
-        // Verify overlay shown (retry logic for non-home-block mode)
-        if (!prefs.getBoolean("block_home_screen", false)) {
-            handler.postDelayed({
-                val currentFg = getCurrentForegroundApp()
-                if (currentFg == pkg && prefs.getBoolean("focus_mode", false) &&
-                    !Whitelist.isWhitelisted(pkg)) {
-                    val prev = blockAttempts[pkg] ?: return@postDelayed
-                    blockAttempts[pkg] = prev.copy(
-                        time = System.currentTimeMillis(),
-                        retries = prev.retries + 1
-                    )
-                    Log.w(TAG, "Overlay may have failed for $pkg — retrying (attempt ${prev.retries + 1})")
-                    launchBlockedActivity(pkg, reason)
-                }
-            }, OVERLAY_VERIFY_DELAY_MS)
+            lastBlockedTime[pkg] = now
+            launchBlockedActivity(pkg, blockReason)
         }
     }
 
     private fun launchBlockedActivity(pkg: String, reason: UsageTracker.BlockReason) {
-        try {
-            val intent = Intent(this, BlockedActivity::class.java).apply {
-                putExtra(BlockedActivity.EXTRA_BLOCKED_PKG, pkg)
-                putExtra(BlockedActivity.EXTRA_BLOCK_REASON, reason.name)
-                flags = Intent.FLAG_ACTIVITY_NEW_TASK or
-                        Intent.FLAG_ACTIVITY_CLEAR_TOP or
-                        Intent.FLAG_ACTIVITY_SINGLE_TOP or
-                        Intent.FLAG_ACTIVITY_NO_ANIMATION
-            }
-            startActivity(intent)
-        } catch (e: Exception) {
-            Log.e(TAG, "Failed to launch BlockedActivity for $pkg", e)
+        Log.d(TAG, "Blocking $pkg reason=$reason")
+        val intent = Intent(this, BlockedActivity::class.java).apply {
+            putExtra(BlockedActivity.EXTRA_BLOCKED_PKG, pkg)
+            putExtra(BlockedActivity.EXTRA_BLOCK_REASON, reason.name)
+            flags = Intent.FLAG_ACTIVITY_NEW_TASK or
+                    Intent.FLAG_ACTIVITY_CLEAR_TOP or
+                    Intent.FLAG_ACTIVITY_NO_ANIMATION
         }
+        startActivity(intent)
     }
 
     override fun onBind(intent: Intent?): IBinder? = null
@@ -229,7 +189,7 @@ class AppBlockerService : android.app.Service() {
         super.onDestroy()
         handler.removeCallbacks(appPollRunnable)
         handler.removeCallbacks(routinePollRunnable)
-        handler.removeCallbacksAndMessages(null)
+        stopForeground(STOP_FOREGROUND_REMOVE)
         try { unregisterReceiver(screenReceiver) } catch (_: Exception) {}
     }
 
@@ -238,14 +198,13 @@ class AppBlockerService : android.app.Service() {
         private const val NOTIFICATION_ID = 9001
         private const val APP_POLL_INTERVAL_MS = 1_000L
         private const val ROUTINE_POLL_INTERVAL_MS = 30_000L
-        private const val EVENT_WINDOW_MS = 3_000L
-        private const val BLOCK_COOLDOWN_MS = 2_500L
-        private const val OVERLAY_VERIFY_DELAY_MS = 800L
-        private const val MAX_RETRIES = 3
+        private const val EVENT_WINDOW_MS = 3_000L   // look back 3 s for foreground events
+        private const val BLOCK_COOLDOWN_MS = 2_500L // per-package re-block cooldown
 
         fun start(context: Context) {
             try {
-                context.startForegroundService(Intent(context, AppBlockerService::class.java))
+                val intent = Intent(context, AppBlockerService::class.java)
+                context.startForegroundService(intent)
                 Log.d(TAG, "AppBlockerService start requested")
             } catch (e: Exception) {
                 Log.e(TAG, "Failed to start AppBlockerService", e)

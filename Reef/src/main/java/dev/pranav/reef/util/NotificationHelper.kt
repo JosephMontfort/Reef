@@ -3,7 +3,6 @@ package dev.pranav.reef.util
 import android.Manifest
 import android.app.NotificationChannel
 import android.app.NotificationManager
-import android.widget.RemoteViews
 import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
@@ -29,19 +28,8 @@ object NotificationHelper {
 
         notificationManager.createNotificationChannel(
             NotificationChannel(
-                APP_BLOCKER_SERVICE_CHANNEL_ID,
-                getString(R.string.app_blocker_channel_name),
-                NotificationManager.IMPORTANCE_MIN
-            ).apply {
-                description = getString(R.string.app_blocker_channel_description)
-                setShowBadge(false)
-                setSound(null, null)
-                enableLights(false)
-                enableVibration(false)
-            }
-        )
-        notificationManager.createNotificationChannel(
-                NotificationChannel(BLOCKER_CHANNEL_ID, getString(R.string.blocker_channel_name),
+                BLOCKER_CHANNEL_ID,
+                getString(R.string.blocker_channel_name),
                 NotificationManager.IMPORTANCE_HIGH
             ).apply {
                 description = getString(R.string.blocker_channel_description)
