@@ -404,6 +404,12 @@
     <!-- FocusModeService paused state -->
     <string name="paused_time">Paused — %1$s remaining</string>
 
+    <!-- BlockedActivity - Home Block Mode -->
+    <string name="block_home_screen">Block Home Screen</string>
+    <string name="block_home_screen_desc">Overlay persists on home screen during focus</string>
+    <string name="home_block_subtitle">Focus session active. Only allowed apps are accessible.</string>
+    <string name="allowed_apps_label">ALLOWED APPS</string>
+
     <!-- BlockedActivity -->
     <string name="go_home">Go Home</string>
 

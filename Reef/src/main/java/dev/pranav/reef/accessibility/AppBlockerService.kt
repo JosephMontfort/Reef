@@ -32,6 +32,7 @@ class AppBlockerService : android.app.Service() {
     private val handler = Handler(Looper.getMainLooper())
     private var keyguardManager: KeyguardManager? = null
     private var isScreenOn = true
+    private var defaultLauncherPkg: String? = null
 
     // Track block state per pkg: timestamp + retry count
     private data class BlockAttempt(val time: Long, val retries: Int)
@@ -79,6 +80,11 @@ class AppBlockerService : android.app.Service() {
         }
         keyguardManager = getSystemService(KEYGUARD_SERVICE) as KeyguardManager
         createNotificationChannel()
+
+        // Cache default launcher package for home-block mode
+        defaultLauncherPkg = packageManager.resolveActivity(
+            Intent(Intent.ACTION_MAIN).apply { addCategory(Intent.CATEGORY_HOME) }, 0
+        )?.activityInfo?.packageName
 
         val filter = IntentFilter().apply {
             addAction(Intent.ACTION_SCREEN_OFF)
@@ -132,16 +138,32 @@ class AppBlockerService : android.app.Service() {
 
     private fun checkForegroundApp() {
         val pkg = getCurrentForegroundApp() ?: return
-        if (pkg == packageName) return
+        if (pkg == packageName) return  // Always allow Reef itself
 
         val now = System.currentTimeMillis()
-        val attempt = blockAttempts[pkg]
+        val focusMode = prefs.getBoolean("focus_mode", false)
+        val blockHomeScreen = prefs.getBoolean("block_home_screen", false)
 
-        // Cooldown: don't re-attempt within 2.5s unless it's a retry
+        // ── Home-block mode: persistent overlay for all non-whitelisted (incl. launcher) ──
+        if (focusMode && blockHomeScreen) {
+            val isAllowed = Whitelist.isWhitelisted(pkg) && pkg != defaultLauncherPkg
+            if (isAllowed) {
+                // Whitelisted non-launcher app opened — dismiss overlay
+                if (BlockedActivity.isShowing) {
+                    sendBroadcast(Intent(BlockedActivity.ACTION_DISMISS).apply { setPackage(packageName) })
+                }
+                blockAttempts.remove(pkg)
+            } else if (!BlockedActivity.isShowing) {
+                triggerBlock(pkg, UsageTracker.BlockReason.ROUTINE_LIMIT, now)
+            }
+            return
+        }
+
+        // ── Normal focus mode: block non-whitelisted apps ──
+        val attempt = blockAttempts[pkg]
         if (attempt != null && (now - attempt.time) < BLOCK_COOLDOWN_MS && attempt.retries == 0) return
 
-        // Focus mode: block everything not whitelisted
-        if (prefs.getBoolean("focus_mode", false)) {
+        if (focusMode) {
             if (!Whitelist.isWhitelisted(pkg)) {
                 FocusStats.recordBlockEvent(pkg, "focus_mode")
                 triggerBlock(pkg, UsageTracker.BlockReason.ROUTINE_LIMIT, now)
@@ -153,7 +175,6 @@ class AppBlockerService : android.app.Service() {
         if (blockReason != UsageTracker.BlockReason.NONE) {
             triggerBlock(pkg, blockReason, now)
         } else {
-            // App is now allowed — clear any pending retry state
             blockAttempts.remove(pkg)
         }
     }
@@ -162,30 +183,28 @@ class AppBlockerService : android.app.Service() {
         val existing = blockAttempts[pkg]
         val retries = existing?.retries ?: 0
 
-        if (retries > MAX_RETRIES) {
-            // Give up after too many retries — cleared on next allowed detection
-            return
-        }
+        if (retries > MAX_RETRIES) return
 
         Log.d(TAG, "Blocking $pkg reason=$reason retry=$retries")
         blockAttempts[pkg] = BlockAttempt(now, retries)
         launchBlockedActivity(pkg, reason)
 
-        // Schedule a verification check: if blocked app is still foreground in 800ms,
-        // the overlay may have failed — retry up to MAX_RETRIES times.
-        handler.postDelayed({
-            val currentFg = getCurrentForegroundApp()
-            if (currentFg == pkg && prefs.getBoolean("focus_mode", false) &&
-                !Whitelist.isWhitelisted(pkg)) {
-                val prev = blockAttempts[pkg] ?: return@postDelayed
-                blockAttempts[pkg] = prev.copy(
-                    time = System.currentTimeMillis(),
-                    retries = prev.retries + 1
-                )
-                Log.w(TAG, "Overlay may have failed for $pkg — retrying (attempt ${prev.retries + 1})")
-                launchBlockedActivity(pkg, reason)
-            }
-        }, OVERLAY_VERIFY_DELAY_MS)
+        // Verify overlay shown (retry logic for non-home-block mode)
+        if (!prefs.getBoolean("block_home_screen", false)) {
+            handler.postDelayed({
+                val currentFg = getCurrentForegroundApp()
+                if (currentFg == pkg && prefs.getBoolean("focus_mode", false) &&
+                    !Whitelist.isWhitelisted(pkg)) {
+                    val prev = blockAttempts[pkg] ?: return@postDelayed
+                    blockAttempts[pkg] = prev.copy(
+                        time = System.currentTimeMillis(),
+                        retries = prev.retries + 1
+                    )
+                    Log.w(TAG, "Overlay may have failed for $pkg — retrying (attempt ${prev.retries + 1})")
+                    launchBlockedActivity(pkg, reason)
+                }
+            }, OVERLAY_VERIFY_DELAY_MS)
+        }
     }
 
     private fun launchBlockedActivity(pkg: String, reason: UsageTracker.BlockReason) {

@@ -219,6 +219,7 @@ fun SimpleFocusSetup(onStart: (TimerConfig) -> Unit) {
     var hours by remember { mutableIntStateOf(0) }
     var minutes by remember { mutableIntStateOf(30) }
     var isStrictMode by remember { mutableStateOf(false) }
+    var blockHomeScreen by remember { mutableStateOf(prefs.getBoolean("block_home_screen", false)) }
 
     val totalMinutes = hours * 60 + minutes
 
@@ -378,9 +379,46 @@ fun SimpleFocusSetup(onStart: (TimerConfig) -> Unit) {
             )
         }
 
-        Spacer(modifier = Modifier.height(16.dp))
+        // Block Home Screen toggle
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 8.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Icon(
+                    imageVector = Icons.Rounded.Lock,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.onSurface
+                )
+                Column {
+                    Text(
+                        text = stringResource(R.string.block_home_screen),
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                    Text(
+                        text = stringResource(R.string.block_home_screen_desc),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+            Switch(
+                checked = blockHomeScreen,
+                onCheckedChange = {
+                    blockHomeScreen = it
+                    prefs.edit().putBoolean("block_home_screen", it).apply()
+                }
+            )
+        }
 
-        FlowRow(
+        Spacer(modifier = Modifier.height(8.dp))
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.CenterHorizontally),
         ) {
@@ -451,6 +489,7 @@ fun PomodoroFocusSetup(onStart: (TimerConfig) -> Unit) {
         mutableIntStateOf(prefs.getInt("pomodoro_cycles", 4))
     }
     var isStrictMode by remember { mutableStateOf(false) }
+    var blockHomeScreen by remember { mutableStateOf(prefs.getBoolean("block_home_screen", false)) }
 
     Column(
         modifier = Modifier
@@ -551,7 +590,46 @@ fun PomodoroFocusSetup(onStart: (TimerConfig) -> Unit) {
             )
         }
 
-        Spacer(modifier = Modifier.height(24.dp))
+        // Block Home Screen toggle
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(vertical = 8.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Icon(
+                    imageVector = Icons.Rounded.Lock,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.onSurface
+                )
+                Column {
+                    Text(
+                        text = stringResource(R.string.block_home_screen),
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                    Text(
+                        text = stringResource(R.string.block_home_screen_desc),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+            Switch(
+                checked = blockHomeScreen,
+                onCheckedChange = {
+                    blockHomeScreen = it
+                    prefs.edit().putBoolean("block_home_screen", it).apply()
+                }
+            )
+        }
+
+        Spacer(modifier = Modifier.height(16.dp))
 
         Button(
             onClick = {

@@ -20,6 +20,7 @@ import androidx.core.app.NotificationManagerCompat
 import androidx.core.app.ServiceCompat
 import androidx.core.content.edit
 import androidx.core.net.toUri
+import dev.pranav.reef.BlockedActivity
 import dev.pranav.reef.MainActivity
 import dev.pranav.reef.R
 import dev.pranav.reef.data.PhaseType
@@ -114,6 +115,7 @@ class FocusModeService : Service() {
         restoreDND()
         if (FocusStats.activeSession != null) FocusStats.endSession(isCompleted = false)
         prefs.edit { putBoolean("focus_mode", false) }
+        dismissHomeBlockOverlay()
         TimerStateManager.reset()
     }
 
@@ -175,6 +177,7 @@ class FocusModeService : Service() {
         countDownTimer?.cancel()
         TimerStateManager.updateState { copy(isRunning = false, isPaused = true) }
         prefs.edit { putBoolean("focus_mode", false) }
+        dismissHomeBlockOverlay()
         restoreDND()
 
         // Paused: disable chronometer and show static remaining time
@@ -546,6 +549,14 @@ class FocusModeService : Service() {
                 .addAction(NotificationCompat.Action.Builder(0, getString(R.string.notification_continue), continuePending).build())
                 .build()
         )
+    }
+
+    // ─── Home-block overlay dismiss ──────────────────────────────────────────────
+
+    private fun dismissHomeBlockOverlay() {
+        if (prefs.getBoolean("block_home_screen", false)) {
+            sendBroadcast(Intent(BlockedActivity.ACTION_DISMISS).apply { setPackage(packageName) })
+        }
     }
 
     // ─── Sound ───────────────────────────────────────────────────────────────────
