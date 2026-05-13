@@ -11,6 +11,7 @@ import android.os.Handler
 import android.os.Looper
 import android.os.Process
 import android.view.WindowManager
+import android.window.OnBackInvokedDispatcher
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.Image
@@ -95,6 +96,14 @@ class BlockedActivity : ComponentActivity() {
                 @Suppress("UnspecifiedRegisterReceiverFlag")
                 registerReceiver(dismissReceiver, IntentFilter(ACTION_DISMISS))
             }
+            // Android 13+: enableOnBackInvokedCallback=true means onBackPressed() is
+            // SKIPPED entirely.  We must register a no-op OnBackInvokedCallback so the
+            // predictive-back gesture is consumed and cannot dismiss the overlay.
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                onBackInvokedDispatcher.registerOnBackInvokedCallback(
+                    OnBackInvokedDispatcher.PRIORITY_DEFAULT
+                ) { /* consume — do nothing */ }
+            }
         } else {
             handler.postDelayed({ goHome() }, 1_500)
         }
@@ -151,22 +160,16 @@ class BlockedActivity : ComponentActivity() {
     override fun onUserLeaveHint() {
         super.onUserLeaveHint()
         if (isHomeBlockMode && !isLaunchingWhitelisted) {
-            // Post to next looper frame so the relaunch happens right after
-            // Android finishes processing the home-press gesture.
-            handler.post {
-                if (!isFinishing) {
-                    startActivity(
-                        Intent(this, BlockedActivity::class.java).apply {
-                            // singleTask launch mode ensures the existing instance
-                            // is reused (onNewIntent called); NO_ANIMATION prevents
-                            // a visible flash of the home screen.
-                            addFlags(Intent.FLAG_ACTIVITY_NO_ANIMATION)
-                        }
-                    )
+            // Called while activity is still foreground (before onPause), so
+            // startActivity is allowed without background-launch restrictions.
+            // FLAG_NO_ANIMATION hides the home screen flash; singleTask reuses
+            // the existing instance via onNewIntent instead of creating a new one.
+            startActivity(
+                Intent(this, BlockedActivity::class.java).apply {
+                    addFlags(Intent.FLAG_ACTIVITY_NO_ANIMATION)
                 }
-            }
+            )
         }
-        // Always clear the flag after the leave-hint is processed.
         isLaunchingWhitelisted = false
     }
 
