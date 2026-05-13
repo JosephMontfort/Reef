@@ -37,14 +37,14 @@ import dev.pranav.reef.ui.Typography.DMSerif
 import dev.pranav.reef.util.prefs
 
 sealed interface TimerConfig {
-    data class Simple(val minutes: Int, val strictMode: Boolean): TimerConfig
+    data class Simple(val minutes: Int, val strictMode: Boolean, val blockHomeScreen: Boolean = false): TimerConfig
     data class Pomodoro(
         val focusMinutes: Int,
         val shortBreakMinutes: Int,
         val longBreakMinutes: Int,
         val cycles: Int,
         val strictMode: Boolean
-    ): TimerConfig
+    , val blockHomeScreen: Boolean = false): TimerConfig
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
