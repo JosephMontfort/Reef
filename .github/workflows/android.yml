@@ -4,6 +4,9 @@ on:
   push:
   workflow_dispatch:
 
+permissions:
+  contents: write
+
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -30,34 +33,32 @@ jobs:
       - name: Build Release APK
         run: ./gradlew clean assembleRelease
 
-      - name: Install rclone
-        run: curl https://rclone.org/install.sh | sudo bash
-
-      - name: Write Google service account file
+      - name: Get next version number
+        id: version
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
-          mkdir -p ~/.config/rclone
-          printf '%s' '${{ secrets.GDRIVE_SERVICE_ACCOUNT_JSON }}' > /tmp/gdrive-sa.json
-          cat > ~/.config/rclone/rclone.conf <<EOF
-          [gdrive]
-          type = drive
-          scope = drive
-          service_account_file = /tmp/gdrive-sa.json
-          EOF
-
-      - name: Get next build number
-        id: buildnum
-        run: |
-          COUNT=$(rclone lsf gdrive:${{ secrets.GDRIVE_FOLDER_ID }} --files-only | wc -l)
+          COUNT=$(gh release list --limit 1000 | wc -l)
           NEXT=$((COUNT + 1))
-          echo "build=$NEXT" >> "$GITHUB_OUTPUT"
+          echo "version=$NEXT" >> "$GITHUB_OUTPUT"
 
       - name: Rename APK
         run: |
           APK=$(find Reef/build/outputs/apk/release -name "*.apk" | head -n 1)
-          cp "$APK" "Reef-v${{ steps.buildnum.outputs.build }}.apk"
+          cp "$APK" "Reef-v${{ steps.version.outputs.version }}.apk"
 
-      - name: Upload APK to Google Drive
+      - name: Create Release
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
-          rclone copy "Reef-v${{ steps.buildnum.outputs.build }}.apk" \
-            gdrive:${{ secrets.GDRIVE_FOLDER_ID }} \
-            --progress
+          gh release create "v${{ steps.version.outputs.version }}" \
+            --title "Reef v${{ steps.version.outputs.version }}" \
+            --notes "Automated release build"
+
+      - name: Upload APK to Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release upload "v${{ steps.version.outputs.version }}" \
+            "Reef-v${{ steps.version.outputs.version }}.apk" \
+            --clobber
