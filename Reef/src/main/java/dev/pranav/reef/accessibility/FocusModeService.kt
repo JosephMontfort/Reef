@@ -146,7 +146,7 @@ class FocusModeService : Service() {
 
         if (!restored.state.isPaused) {
             enableDNDIfNeeded()
-            postNotification(getNotificationTitle(), true, !restored.state.isStrictMode && !TimerStateManager.state.value.isInBreak(), restored.remainingMs)
+            postNotification(getNotificationTitle(), true, !restored.state.isStrictMode && !(TimerStateManager.state.value.pomodoroPhase == dev.pranav.reef.timer.PomodoroPhase.SHORT_BREAK || TimerStateManager.state.value.pomodoroPhase == dev.pranav.reef.timer.PomodoroPhase.LONG_BREAK), restored.remainingMs)
             startCountdown(restored.remainingMs)
         } else {
             postNotification(getNotificationTitle(), false, false, restored.remainingMs)
@@ -230,7 +230,7 @@ class FocusModeService : Service() {
         val state = TimerStateManager.state.value
         if (state.isStrictMode) return
         // Don't pause during breaks — breaks are unpauseable
-        if (state.isPomodoroMode && state.isInBreak()) return
+        if (state.isPomodoroMode && (state.pomodoroPhase == dev.pranav.reef.timer.PomodoroPhase.SHORT_BREAK || state.pomodoroPhase == dev.pranav.reef.timer.PomodoroPhase.LONG_BREAK)) return
 
         countDownTimer?.cancel()
         TimerStateManager.updateState { copy(isRunning = false, isPaused = true) }
@@ -328,7 +328,7 @@ class FocusModeService : Service() {
                     postNotification(
                         title = getNotificationTitle(),
                         isRunning = true,
-                        showPauseButton = !TimerStateManager.state.value.isStrictMode && !TimerStateManager.state.value.isInBreak(),
+                        showPauseButton = !TimerStateManager.state.value.isStrictMode && !(TimerStateManager.state.value.pomodoroPhase == dev.pranav.reef.timer.PomodoroPhase.SHORT_BREAK || TimerStateManager.state.value.pomodoroPhase == dev.pranav.reef.timer.PomodoroPhase.LONG_BREAK),
                         timeLeft = millisUntilFinished
                     )
                 }
