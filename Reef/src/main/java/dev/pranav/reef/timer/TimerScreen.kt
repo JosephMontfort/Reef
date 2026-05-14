@@ -727,6 +727,9 @@ fun PomodoroFocusSetup(onStart: (TimerConfig) -> Unit) {
         Spacer(modifier = Modifier.height(16.dp))
 
         Button(
+            onClick = {
+                onStartTimer(
+                    TimerConfig.Pomodoro(
                         focusMinutes,
                         shortBreakMinutes,
                         longBreakMinutes,
@@ -736,7 +739,6 @@ fun PomodoroFocusSetup(onStart: (TimerConfig) -> Unit) {
                 )
             },
             modifier = Modifier.fillMaxWidth(),
-            shapes = ButtonDefaults.shapes(pressedShape = ButtonDefaults.pressedShape),
             colors = ButtonDefaults.buttonColors(
                 containerColor = MaterialTheme.colorScheme.primary,
                 contentColor = MaterialTheme.colorScheme.onPrimary
