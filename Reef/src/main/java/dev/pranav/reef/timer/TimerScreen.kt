@@ -543,6 +543,11 @@ fun PomodoroFocusSetup(onStart: (TimerConfig) -> Unit) {
     var blockHomeScreen by remember { mutableStateOf(prefs.getBoolean("block_home_screen", false)) }
     var nuclearWatchdog by remember { mutableStateOf(prefs.getBoolean("nuclear_watchdog_enabled", false)) }
     val context = LocalContext.current
+
+    Column(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
         Spacer(Modifier.height(16.dp))
 
         Column(
@@ -728,7 +733,7 @@ fun PomodoroFocusSetup(onStart: (TimerConfig) -> Unit) {
 
         Button(
             onClick = {
-                onStartTimer(
+                onStart(
                     TimerConfig.Pomodoro(
                         focusMinutes,
                         shortBreakMinutes,
@@ -756,6 +761,8 @@ fun PomodoroFocusSetup(onStart: (TimerConfig) -> Unit) {
             )
         }
     }
+}
+
 }
 
 @OptIn(ExperimentalMaterial3ExpressiveApi::class)
@@ -1080,4 +1087,3 @@ fun RunningTimerScreenPreview() {
             onRestart = {}
         )
     }
-}
