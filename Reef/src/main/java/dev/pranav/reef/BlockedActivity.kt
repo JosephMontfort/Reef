@@ -45,7 +45,6 @@ import dev.pranav.reef.util.applyDefaults
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.util.Locale
-import java.util.Locale
 
 class BlockedActivity : ComponentActivity() {
 

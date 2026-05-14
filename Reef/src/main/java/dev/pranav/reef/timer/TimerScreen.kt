@@ -15,6 +15,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.res.pluralStringResource
@@ -498,9 +499,9 @@ fun SimpleFocusSetup(onStart: (TimerConfig) -> Unit) {
         Spacer(modifier = Modifier.height(32.dp))
 
         Button(
-            onClick = { onStart(TimerConfig.Simple(totalMinutes, isStrictMode)) },
+            onClick = { onStart(TimerConfig.Simple(minutes, isStrictMode)) },
             modifier = Modifier.fillMaxWidth(),
-            enabled = totalMinutes > 0,
+            enabled = minutes > 0,
             shapes = ButtonDefaults.shapes(pressedShape = ButtonDefaults.pressedShape),
             colors = ButtonDefaults.buttonColors(
                 containerColor = MaterialTheme.colorScheme.primary,

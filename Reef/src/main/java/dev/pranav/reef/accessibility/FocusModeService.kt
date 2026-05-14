@@ -146,7 +146,7 @@ class FocusModeService : Service() {
 
         if (!restored.state.isPaused) {
             enableDNDIfNeeded()
-            postNotification(getNotificationTitle(), true, !restored.state.isStrictMode && !TimerStateManager.isInBreak(), restored.remainingMs)
+            postNotification(getNotificationTitle(), true, !restored.state.isStrictMode && !TimerStateManager.state.value.isInBreak(), restored.remainingMs)
             startCountdown(restored.remainingMs)
         } else {
             postNotification(getNotificationTitle(), false, false, restored.remainingMs)
@@ -328,7 +328,7 @@ class FocusModeService : Service() {
                     postNotification(
                         title = getNotificationTitle(),
                         isRunning = true,
-                        showPauseButton = !TimerStateManager.state.value.isStrictMode && !TimerStateManager.isInBreak(),
+                        showPauseButton = !TimerStateManager.state.value.isStrictMode && !TimerStateManager.state.value.isInBreak(),
                         timeLeft = millisUntilFinished
                     )
                 }
