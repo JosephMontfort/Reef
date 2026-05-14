@@ -2,12 +2,10 @@ package dev.pranav.reef
 
 import android.content.Context
 import android.content.Intent
-import android.content.pm.LauncherApps
 import android.os.Build
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
-import android.os.Process
 import android.view.WindowManager
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -26,12 +24,11 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.StrokeCap
-import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
@@ -40,14 +37,14 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.core.graphics.drawable.toBitmap
 import dev.pranav.reef.accessibility.UsageTracker
 import dev.pranav.reef.timer.TimerStateManager
 import dev.pranav.reef.ui.ReefTheme
-import dev.pranav.reef.util.Whitelist
+import dev.pranav.reef.util.WhitelistAppCache
 import dev.pranav.reef.util.applyDefaults
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import java.util.Locale
 import java.util.Locale
 
 class BlockedActivity : ComponentActivity() {
@@ -130,26 +127,23 @@ data class AllowedApp(
 @Composable
 fun HomeBlockScreen(onLaunchApp: (Intent) -> Unit) {
     val context = LocalContext.current
-    var allowedApps by remember { mutableStateOf<List<AllowedApp>>(emptyList()) }
 
+    // Use pre-warmed cache — falls back to loading if cache is empty
+    var allowedApps by remember {
+        mutableStateOf(
+            WhitelistAppCache.apps.map {
+                AllowedApp(it.packageName, it.label, it.icon)
+            }
+        )
+    }
+
+    // If cache was empty (first open), load now and also warm for next time
     LaunchedEffect(Unit) {
-        allowedApps = withContext(Dispatchers.IO) {
-            val pm = context.packageManager
-            val launcherApps =
-                context.getSystemService(Context.LAUNCHER_APPS_SERVICE) as LauncherApps
-            launcherApps.getActivityList(null, Process.myUserHandle())
-                .distinctBy { it.applicationInfo.packageName }
-                .mapNotNull { info ->
-                    val pkg = info.applicationInfo.packageName
-                    // isWhitelisted() now auto-returns true for Reef's own package,
-                    // so no extra exclusion needed here.
-                    if (!Whitelist.isWhitelisted(pkg)) return@mapNotNull null
-                    runCatching {
-                        val icon = info.applicationInfo.loadIcon(pm).toBitmap().asImageBitmap()
-                        AllowedApp(pkg, info.label.toString(), icon)
-                    }.getOrNull()
-                }
-                .sortedBy { it.label }
+        if (allowedApps.isEmpty()) {
+            allowedApps = withContext(Dispatchers.IO) {
+                WhitelistAppCache.refreshSync(context)
+                WhitelistAppCache.apps.map { AllowedApp(it.packageName, it.label, it.icon) }
+            }
         }
     }
 

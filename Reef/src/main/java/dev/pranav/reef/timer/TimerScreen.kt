@@ -220,8 +220,8 @@ fun SimpleFocusSetup(onStart: (TimerConfig) -> Unit) {
     var minutes by remember { mutableIntStateOf(30) }
     var isStrictMode by remember { mutableStateOf(false) }
     var blockHomeScreen by remember { mutableStateOf(prefs.getBoolean("block_home_screen", false)) }
-
-    val totalMinutes = hours * 60 + minutes
+    var nuclearWatchdog by remember { mutableStateOf(prefs.getBoolean("nuclear_watchdog_enabled", false)) }
+    val context = LocalContext.current
 
     Column(
         modifier = Modifier
@@ -418,6 +418,54 @@ fun SimpleFocusSetup(onStart: (TimerConfig) -> Unit) {
             )
         }
 
+        // Nuclear watchdog toggle
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 8.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                modifier = Modifier.weight(1f)
+            ) {
+                Icon(
+                    imageVector = Icons.Rounded.Security,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.onSurface
+                )
+                Column {
+                    Text(
+                        text = stringResource(R.string.nuclear_watchdog),
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                    Text(
+                        text = stringResource(R.string.nuclear_watchdog_desc),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+            Switch(
+                checked = nuclearWatchdog,
+                onCheckedChange = { enabled ->
+                    if (enabled && !dev.pranav.reef.util.WatchdogManager.hasRoot()) {
+                        android.widget.Toast.makeText(
+                            context,
+                            context.getString(R.string.nuclear_watchdog_no_root),
+                            android.widget.Toast.LENGTH_LONG
+                        ).show()
+                    } else {
+                        nuclearWatchdog = enabled
+                        prefs.edit().putBoolean("nuclear_watchdog_enabled", enabled).apply()
+                    }
+                }
+            )
+        }
+
         Spacer(modifier = Modifier.height(16.dp))
 
         FlowRow(
@@ -492,12 +540,8 @@ fun PomodoroFocusSetup(onStart: (TimerConfig) -> Unit) {
     }
     var isStrictMode by remember { mutableStateOf(false) }
     var blockHomeScreen by remember { mutableStateOf(prefs.getBoolean("block_home_screen", false)) }
-
-    Column(
-        modifier = Modifier
-            .fillMaxWidth(),
-        horizontalAlignment = Alignment.CenterHorizontally
-    ) {
+    var nuclearWatchdog by remember { mutableStateOf(prefs.getBoolean("nuclear_watchdog_enabled", false)) }
+    val context = LocalContext.current
         Spacer(Modifier.height(16.dp))
 
         Column(
@@ -631,12 +675,57 @@ fun PomodoroFocusSetup(onStart: (TimerConfig) -> Unit) {
             )
         }
 
+        // Nuclear watchdog toggle
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 8.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                modifier = Modifier.weight(1f)
+            ) {
+                Icon(
+                    imageVector = Icons.Rounded.Security,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.onSurface
+                )
+                Column {
+                    Text(
+                        text = stringResource(R.string.nuclear_watchdog),
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                    Text(
+                        text = stringResource(R.string.nuclear_watchdog_desc),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+            Switch(
+                checked = nuclearWatchdog,
+                onCheckedChange = { enabled ->
+                    if (enabled && !dev.pranav.reef.util.WatchdogManager.hasRoot()) {
+                        android.widget.Toast.makeText(
+                            context,
+                            context.getString(R.string.nuclear_watchdog_no_root),
+                            android.widget.Toast.LENGTH_LONG
+                        ).show()
+                    } else {
+                        nuclearWatchdog = enabled
+                        prefs.edit().putBoolean("nuclear_watchdog_enabled", enabled).apply()
+                    }
+                }
+            )
+        }
+
         Spacer(modifier = Modifier.height(16.dp))
 
         Button(
-            onClick = {
-                onStart(
-                    TimerConfig.Pomodoro(
                         focusMinutes,
                         shortBreakMinutes,
                         longBreakMinutes,

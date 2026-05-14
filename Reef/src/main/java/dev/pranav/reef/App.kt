@@ -35,6 +35,13 @@ class App : Application(), Configuration.Provider {
         // Start the UsageStats-based app blocker immediately
         AppBlockerService.start(this)
 
+        // Recover any focus session that was interrupted by a force-stop
+        SessionPersistence.restore(this)?.let {
+            startService(Intent(this, dev.pranav.reef.accessibility.FocusModeService::class.java).apply {
+                action = dev.pranav.reef.accessibility.FocusModeService.ACTION_RESUME_PERSISTED
+            })
+        }
+
         scheduleWatcher(this)
 
         RoutineSessionManager.evaluateAndSync(this)

@@ -29,6 +29,9 @@ import dev.pranav.reef.timer.PomodoroPhase
 import dev.pranav.reef.timer.TimerSessionState
 import dev.pranav.reef.timer.TimerStateManager
 import dev.pranav.reef.util.*
+import dev.pranav.reef.util.WhitelistAppCache
+import dev.pranav.reef.util.WatchdogManager
+import dev.pranav.reef.util.SessionPersistence
 import java.util.Locale
 import java.util.concurrent.TimeUnit
 
@@ -44,6 +47,7 @@ class FocusModeService : Service() {
         const val ACTION_PAUSE = "dev.pranav.reef.PAUSE_TIMER"
         const val ACTION_RESUME = "dev.pranav.reef.RESUME_TIMER"
         const val ACTION_RESTART = "dev.pranav.reef.RESTART_TIMER"
+        const val ACTION_RESUME_PERSISTED = "dev.pranav.reef.RESUME_PERSISTED"
         const val EXTRA_TIME_LEFT = "extra_time_left"
         const val EXTRA_TIMER_STATE = "extra_timer_state"
     }
@@ -93,10 +97,11 @@ class FocusModeService : Service() {
         if (intent.action != ACTION_PAUSE) promoteToForeground()
 
         when (intent.action) {
-            ACTION_PAUSE   -> pauseTimer()
-            ACTION_RESUME  -> resumeTimer()
-            ACTION_RESTART -> restartCurrentPhase()
-            ACTION_START   -> startTimer()
+            ACTION_PAUSE            -> pauseTimer()
+            ACTION_RESUME           -> resumeTimer()
+            ACTION_RESTART          -> restartCurrentPhase()
+            ACTION_START            -> startTimer()
+            ACTION_RESUME_PERSISTED -> resumePersistedSession()
         }
         return START_STICKY
     }
@@ -106,7 +111,6 @@ class FocusModeService : Service() {
     override fun onDestroy() {
         super.onDestroy()
         countDownTimer?.cancel()
-        // Ensure the foreground notification is removed on Android 12+
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
             stopForeground(STOP_FOREGROUND_REMOVE)
         }
@@ -116,6 +120,43 @@ class FocusModeService : Service() {
         prefs.edit { putBoolean("focus_mode", false) }
         dismissHomeBlockOverlay()
         TimerStateManager.reset()
+        // Note: we do NOT clear SessionPersistence here — onDestroy() is called
+        // on force-stop too. Persistence is cleared only in endSession() (normal
+        // completion) or when the user explicitly stops the session from the UI.
+    }
+
+    // ─── Persisted session recovery ─────────────────────────────────────────────
+
+    private fun resumePersistedSession() {
+        val restored = SessionPersistence.restore(this) ?: run {
+            stopSelf(); return
+        }
+
+        initialDuration = restored.phaseDurationMs.coerceAtLeast(restored.remainingMs)
+        lastNotifiedMinute = -1L
+
+        restored.pomodoroConfig?.let { TimerStateManager.setPomodoroConfig(it) }
+        TimerStateManager.updateState { restored.state }
+
+        prefs.edit { putBoolean("focus_mode", restored.state.pomodoroPhase == PomodoroPhase.FOCUS || !restored.state.isPomodoroMode) }
+        FocusStats.startSession(
+            if (restored.state.isPomodoroMode) dev.pranav.reef.data.SessionType.POMODORO
+            else dev.pranav.reef.data.SessionType.SIMPLE
+        )
+
+        if (!restored.state.isPaused) {
+            enableDNDIfNeeded()
+            postNotification(getNotificationTitle(), true, !restored.state.isStrictMode && !TimerStateManager.isInBreak(), restored.remainingMs)
+            startCountdown(restored.remainingMs)
+        } else {
+            postNotification(getNotificationTitle(), false, false, restored.remainingMs)
+            broadcastTimerUpdate(formatTime(restored.remainingMs))
+        }
+
+        // Restart nuclear watchdog if it was running before the kill
+        if (SessionPersistence.isNuclearRunning(this)) {
+            Thread { WatchdogManager.start(this) }.start()
+        }
     }
 
     // ─── Timer actions ──────────────────────────────────────────────────────────
@@ -161,6 +202,21 @@ class FocusModeService : Service() {
         prefs.edit { putBoolean("focus_mode", true) }
         enableDNDIfNeeded()
 
+        // Persist immediately so a force-kill right after start is recoverable
+        SessionPersistence.saveRunning(
+            this, TimerStateManager.state.value,
+            focusTimeMillis, focusTimeMillis,
+            TimerStateManager.getPomodoroConfig()
+        )
+
+        // Pre-warm whitelist app icon cache for instant overlay display
+        WhitelistAppCache.refresh(this)
+
+        // Start nuclear watchdog if enabled
+        if (prefs.getBoolean("nuclear_watchdog_enabled", false)) {
+            Thread { WatchdogManager.start(this) }.start()
+        }
+
         postNotification(
             title = getNotificationTitle(),
             isRunning = true,
@@ -173,13 +229,23 @@ class FocusModeService : Service() {
     private fun pauseTimer() {
         val state = TimerStateManager.state.value
         if (state.isStrictMode) return
+        // Don't pause during breaks — breaks are unpauseable
+        if (state.isPomodoroMode && state.isInBreak()) return
+
         countDownTimer?.cancel()
         TimerStateManager.updateState { copy(isRunning = false, isPaused = true) }
-        prefs.edit { putBoolean("focus_mode", false) }
-        dismissHomeBlockOverlay()
-        restoreDND()
 
-        // Paused: disable chronometer and show static remaining time
+        // ── Blocks stay active during pause ──────────────────────────────────
+        // Do NOT set focus_mode=false, do NOT dismiss overlay, do NOT restore DND.
+        // The user paused the timer but the focus session (and all blocking) is
+        // still in effect.  Only resuming or ending the session lifts the blocks.
+
+        SessionPersistence.savePaused(
+            this, TimerStateManager.state.value,
+            state.timeRemaining, initialDuration,
+            TimerStateManager.getPomodoroConfig()
+        )
+
         lastNotifiedMinute = -1L
         postNotification(
             title = getNotificationTitle(),
@@ -237,24 +303,32 @@ class FocusModeService : Service() {
 
     private fun startCountdown(timeMillis: Long) {
         countDownTimer?.cancel()
+        // Record when this phase ends so force-kill recovery has an accurate epoch
+        SessionPersistence.saveRunning(
+            this, TimerStateManager.state.value,
+            timeMillis, initialDuration,
+            TimerStateManager.getPomodoroConfig()
+        )
         countDownTimer = object : CountDownTimer(timeMillis, 1000) {
             override fun onTick(millisUntilFinished: Long) {
                 if (TimerStateManager.state.value.isPaused) return
                 TimerStateManager.updateState { copy(timeRemaining = millisUntilFinished) }
 
-                // ── Broadcast every second so the in-app timer UI stays smooth ──
                 broadcastTimerUpdate(formatTime(millisUntilFinished))
 
-                // ── Update notification only when the displayed minute changes ──
-                // The chronometer handles second-level counting; we only need to
-                // post a new notification to update the chip text and action buttons.
                 val minute = millisUntilFinished / 60_000L
                 if (minute != lastNotifiedMinute) {
                     lastNotifiedMinute = minute
+                    // Persist every minute — cheap and covers the 2-minute kill scenario
+                    SessionPersistence.saveRunning(
+                        this@FocusModeService, TimerStateManager.state.value,
+                        millisUntilFinished, initialDuration,
+                        TimerStateManager.getPomodoroConfig()
+                    )
                     postNotification(
                         title = getNotificationTitle(),
                         isRunning = true,
-                        showPauseButton = !TimerStateManager.state.value.isStrictMode,
+                        showPauseButton = !TimerStateManager.state.value.isStrictMode && !TimerStateManager.isInBreak(),
                         timeLeft = millisUntilFinished
                     )
                 }
@@ -348,7 +422,9 @@ class FocusModeService : Service() {
             val isBreak = state.pomodoroPhase == PomodoroPhase.SHORT_BREAK ||
                     state.pomodoroPhase == PomodoroPhase.LONG_BREAK
 
-            if (!isStrictMode || (!showPauseButton && isBreak && state.isPaused)) {
+            // No pause during breaks; never pause in strict mode
+            val canShowPauseOrResume = !isStrictMode && !isBreak
+            if (canShowPauseOrResume) {
                 val (action, label) = if (showPauseButton)
                     ACTION_PAUSE to getString(R.string.notification_pause)
                 else
@@ -392,6 +468,8 @@ class FocusModeService : Service() {
         broadcastTimerUpdate("00:00")
         TimerStateManager.reset()
         restoreDND()
+        SessionPersistence.clear(this)
+        Thread { WatchdogManager.stop(this) }.start()
         showFocusCompleteNotification()
         stopSelf()
     }
