@@ -527,18 +527,10 @@ fun SimpleFocusSetup(onStart: (TimerConfig) -> Unit) {
 @OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 fun PomodoroFocusSetup(onStart: (TimerConfig) -> Unit) {
-    var focusMinutes by remember {
-        mutableIntStateOf(prefs.getInt("pomodoro_focus_minutes", 25))
-    }
-    var shortBreakMinutes by remember {
-        mutableIntStateOf(prefs.getInt("pomodoro_short_break_minutes", 5))
-    }
-    var longBreakMinutes by remember {
-        mutableIntStateOf(prefs.getInt("pomodoro_long_break_minutes", 15))
-    }
-    var cycles by remember {
-        mutableIntStateOf(prefs.getInt("pomodoro_cycles", 4))
-    }
+    var focusMinutes by remember { mutableIntStateOf(prefs.getInt("pomodoro_focus_minutes", 25)) }
+    var shortBreakMinutes by remember { mutableIntStateOf(prefs.getInt("pomodoro_short_break_minutes", 5)) }
+    var longBreakMinutes by remember { mutableIntStateOf(prefs.getInt("pomodoro_long_break_minutes", 15)) }
+    var cycles by remember { mutableIntStateOf(prefs.getInt("pomodoro_cycles", 4)) }
     var isStrictMode by remember { mutableStateOf(false) }
     var blockHomeScreen by remember { mutableStateOf(prefs.getBoolean("block_home_screen", false)) }
     var nuclearWatchdog by remember { mutableStateOf(prefs.getBoolean("nuclear_watchdog_enabled", false)) }
@@ -621,28 +613,20 @@ fun PomodoroFocusSetup(onStart: (TimerConfig) -> Unit) {
                 )
                 Column {
                     Text(
-                        text = if (isStrictMode) stringResource(R.string.strict_mode) else stringResource(
-                            R.string.flexible_mode
-                        ),
+                        text = if (isStrictMode) stringResource(R.string.strict_mode) else stringResource(R.string.flexible_mode),
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.SemiBold
                     )
                     Text(
-                        text = if (isStrictMode) stringResource(R.string.no_pausing_allowed) else stringResource(
-                            R.string.pause_resume_anytime
-                        ),
+                        text = if (isStrictMode) stringResource(R.string.no_pausing_allowed) else stringResource(R.string.pause_resume_anytime),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
             }
-            Switch(
-                checked = isStrictMode,
-                onCheckedChange = { isStrictMode = it }
-            )
+            Switch(checked = isStrictMode, onCheckedChange = { isStrictMode = it })
         }
 
-        // Block Home Screen toggle
         Row(
             modifier = Modifier
                 .fillMaxWidth()
@@ -681,7 +665,6 @@ fun PomodoroFocusSetup(onStart: (TimerConfig) -> Unit) {
             )
         }
 
-        // Nuclear watchdog toggle
         Row(
             modifier = Modifier
                 .fillMaxWidth()
@@ -762,9 +745,6 @@ fun PomodoroFocusSetup(onStart: (TimerConfig) -> Unit) {
         }
     }
 }
-
-}
-
 @OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 fun ExpressiveCounter(
@@ -1087,3 +1067,4 @@ fun RunningTimerScreenPreview() {
             onRestart = {}
         )
     }
+}
