@@ -408,6 +408,8 @@
     <string name="block_home_screen">Block Home Screen</string>
     <string name="block_home_screen_desc">Overlay persists on home screen during focus</string>
     <string name="home_block_subtitle">Focus session active. Only allowed apps are accessible.</string>
+    <string name="overlay_permission">Display Over Other Apps</string>
+    <string name="overlay_permission_description">Required for the persistent home-screen block overlay during focus sessions. Without this, pressing Home can dismiss the overlay.</string>
     <string name="allowed_apps_label">ALLOWED APPS</string>
 
     <!-- BlockedActivity -->

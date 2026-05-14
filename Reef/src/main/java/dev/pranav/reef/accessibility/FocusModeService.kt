@@ -20,7 +20,6 @@ import androidx.core.app.NotificationManagerCompat
 import androidx.core.app.ServiceCompat
 import androidx.core.content.edit
 import androidx.core.net.toUri
-import dev.pranav.reef.BlockedActivity
 import dev.pranav.reef.MainActivity
 import dev.pranav.reef.R
 import dev.pranav.reef.data.PhaseType
@@ -309,31 +308,39 @@ class FocusModeService : Service() {
         }
 
         notificationBuilder!!.apply {
-            setContentTitle(title)
+            val chipMin = TimeUnit.MILLISECONDS.toMinutes(timeLeft)
+            val minutesText = if (chipMin > 0) "${chipMin}m" else "<1m"
+
+            // contentTitle is what appears in the collapsed notification pill / Dynamic Island chip.
+            // BigTextStyle.setBigContentTitle() overrides it only in the expanded notification view.
+            setContentTitle(minutesText)
 
             if (isRunning) {
                 setUsesChronometer(true)
                 setChronometerCountDown(true)
                 setWhen(System.currentTimeMillis() + timeLeft)
-                
-                setCustomContentView(null)
-                setCustomBigContentView(null)
-                setStyle(null)
-                
-                setContentText(getString(R.string.time_remaining, "${TimeUnit.MILLISECONDS.toMinutes(timeLeft)} m"))
+
+                val contentText = getString(R.string.time_remaining, "$minutesText")
+                setContentText(contentText)
+                setStyle(
+                    NotificationCompat.BigTextStyle()
+                        .setBigContentTitle(title)   // "Focus Mode" / "Short Break" in expanded
+                        .bigText(contentText)
+                )
             } else {
                 setUsesChronometer(false)
                 setWhen(System.currentTimeMillis())
-                
-                setCustomContentView(null)
-                setCustomBigContentView(null)
-                setStyle(null)
-                
-                setContentText(getString(R.string.paused_time, "${TimeUnit.MILLISECONDS.toMinutes(timeLeft)} m"))
+
+                val contentText = getString(R.string.paused_time, "$minutesText")
+                setContentText(contentText)
+                setStyle(
+                    NotificationCompat.BigTextStyle()
+                        .setBigContentTitle(title)
+                        .bigText(contentText)
+                )
             }
 
-            val chipMin = TimeUnit.MILLISECONDS.toMinutes(timeLeft)
-            setSubText(if (chipMin > 0) "${chipMin}m" else "<1m")
+            setSubText(title)   // Shows "Focus Mode" in the header row of expanded view
 
             clearActions()
 
@@ -555,7 +562,7 @@ class FocusModeService : Service() {
 
     private fun dismissHomeBlockOverlay() {
         if (prefs.getBoolean("block_home_screen", false)) {
-            sendBroadcast(Intent(BlockedActivity.ACTION_DISMISS).apply { setPackage(packageName) })
+            HomeBlockOverlayService.stop(this)
         }
     }
 

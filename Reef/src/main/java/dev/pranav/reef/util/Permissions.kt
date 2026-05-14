@@ -99,7 +99,8 @@ enum class PermissionType {
     USAGE_STATS,
     NOTIFICATION,
     BATTERY_OPTIMIZATION,
-    DND
+    DND,
+    OVERLAY
 }
 
 data class PermissionStatus(
@@ -159,6 +160,16 @@ fun Context.checkAllPermissions(): List<PermissionStatus> {
             isGranted = hasDndPermission(),
             title = getString(R.string.enable_dnd),
             description = getString(R.string.dnd_description)
+        )
+    )
+
+    permissions.add(
+        PermissionStatus(
+            type = PermissionType.OVERLAY,
+            isGranted = android.provider.Settings.canDrawOverlays(this),
+            title = getString(R.string.overlay_permission),
+            description = getString(R.string.overlay_permission_description),
+            isOptional = true
         )
     )
 

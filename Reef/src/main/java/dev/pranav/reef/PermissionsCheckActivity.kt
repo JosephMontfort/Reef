@@ -141,6 +141,14 @@ fun PermissionsScreen(onBackClick: () -> Unit) {
                                     Intent(Settings.ACTION_NOTIFICATION_POLICY_ACCESS_SETTINGS)
                                 context.startActivity(intent)
                             }
+
+                            PermissionType.OVERLAY -> {
+                                val intent = Intent(
+                                    Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
+                                    "package:${context.packageName}".toUri()
+                                )
+                                context.startActivity(intent)
+                            }
                         }
                     }
                 )

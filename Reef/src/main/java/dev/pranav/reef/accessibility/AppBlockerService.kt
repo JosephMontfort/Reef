@@ -149,12 +149,12 @@ class AppBlockerService : android.app.Service() {
             val isAllowed = Whitelist.isWhitelisted(pkg) && pkg != defaultLauncherPkg
             if (isAllowed) {
                 // Whitelisted non-launcher app opened — dismiss overlay
-                if (BlockedActivity.isShowing) {
-                    sendBroadcast(Intent(BlockedActivity.ACTION_DISMISS).apply { setPackage(packageName) })
+                if (HomeBlockOverlayService.isShowing) {
+                    HomeBlockOverlayService.stop(this)
                 }
                 blockAttempts.remove(pkg)
-            } else if (!BlockedActivity.isShowing) {
-                triggerBlock(pkg, UsageTracker.BlockReason.ROUTINE_LIMIT, now)
+            } else if (!HomeBlockOverlayService.isShowing) {
+                HomeBlockOverlayService.start(this)
             }
             return
         }

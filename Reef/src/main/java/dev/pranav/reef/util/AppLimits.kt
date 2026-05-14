@@ -62,7 +62,11 @@ object AppLimits {
 object Whitelist {
     private lateinit var sharedPreferences: SharedPreferences
 
+    /** The app's own package name — always treated as whitelisted regardless of prefs. */
+    private var ownPackageName: String = ""
+
     fun init(context: Context) {
+        ownPackageName = context.packageName
         sharedPreferences = context.getSharedPreferences("whitelist", Context.MODE_PRIVATE)
 
         if (sharedPreferences.all.isEmpty()) {
@@ -130,6 +134,8 @@ object Whitelist {
     }
 
     fun isWhitelisted(packageName: String): Boolean {
+        // Reef itself is always allowed — regardless of user prefs
+        if (packageName == ownPackageName) return true
         return sharedPreferences.getBoolean(packageName, false)
     }
 

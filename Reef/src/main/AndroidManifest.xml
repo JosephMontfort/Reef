@@ -73,6 +73,17 @@
                 android:value="Monitors foreground app usage to enforce screen time limits without requiring Accessibility Service" />
         </service>
 
+        <!-- WindowManager overlay service for persistent home-block focus screen -->
+        <service
+            android:name=".accessibility.HomeBlockOverlayService"
+            android:directBootAware="true"
+            android:exported="false"
+            android:foregroundServiceType="specialUse">
+            <property
+                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+                android:value="Draws a persistent overlay window to block home screen access during focus sessions" />
+        </service>
+
         <!-- Overlay activity shown when a blocked app is detected -->
         <activity
             android:name=".BlockedActivity"
