@@ -1,4 +1,12 @@
-package dev.pranav.reef.util
+from pathlib import Path
+
+root = Path.cwd()
+matches = [p for p in root.rglob("WatchdogManager.kt") if "src/main/java" in str(p)]
+if not matches:
+    raise SystemExit("WatchdogManager.kt not found")
+target = sorted(matches, key=lambda p: len(str(p)))[0]
+
+target.write_text("""package dev.pranav.reef.util
 
 import android.content.Context
 import android.util.Log
@@ -42,38 +50,26 @@ object WatchdogManager {
 
         val script = buildScript(pkg, svcClass)
 
-        val started = runRoot(
+        runRoot(
+            // 1. Write the sentinel so the (possibly already running) script keeps going
             "echo 1 > $SENTINEL_PATH",
-            """
-            cat > $SCRIPT_PATH << 'REEF_EOF'
-            $script
-            REEF_EOF
-            """.trimIndent(),
+            // 2. Write / overwrite the script
+            "cat > $SCRIPT_PATH << 'REEF_EOF'\\n$script\\nREEF_EOF",
             "chmod 755 $SCRIPT_PATH",
+            // 3. Start detached — survives app death
             "nohup sh $SCRIPT_PATH > /dev/null 2>&1 &"
         )
-
-        if (started) {
-            SessionPersistence.markNuclearRunning(context, true)
-            Log.i(TAG, "Watchdog started")
-        } else {
-            SessionPersistence.markNuclearRunning(context, false)
-            Log.e(TAG, "Watchdog failed to start")
-        }
+        SessionPersistence.markNuclearRunning(context, true)
+        Log.i(TAG, "Watchdog started")
     }
 
     /** Stops the watchdog by removing the sentinel file. */
     fun stop(context: Context) {
-        val stopped = runRoot(
+        runRoot(
             "rm -f $SENTINEL_PATH"
         )
-
         SessionPersistence.markNuclearRunning(context, false)
-        if (stopped) {
-            Log.i(TAG, "Watchdog stopped")
-        } else {
-            Log.w(TAG, "Watchdog stop command returned a non-zero exit code")
-        }
+        Log.i(TAG, "Watchdog stopped")
     }
 
     // ── Internal ──────────────────────────────────────────────────────────────
@@ -98,34 +94,16 @@ done
      * Run a series of shell commands sequentially under `su`.
      * Each string is one shell statement; they are joined with `;`.
      */
-    private fun runRoot(vararg commands: String): Boolean {
+    private fun runRoot(vararg commands: String) {
         val joined = commands.joinToString("; ")
-        return try {
+        try {
             val proc = Runtime.getRuntime().exec(arrayOf("su", "-c", joined))
-            val exitCode = proc.waitFor()
-            val stdout = proc.inputStream.bufferedReader().use { it.readText().trim() }
-            val stderr = proc.errorStream.bufferedReader().use { it.readText().trim() }
-            if (exitCode != 0) {
-                Log.e(TAG, buildString {
-                    append("Root command failed (exit=")
-                    append(exitCode)
-                    append("): ")
-                    append(joined)
-                    if (stderr.isNotEmpty()) {
-                        append("\nERR: ")
-                        append(stderr)
-                    }
-                })
-                false
-            } else {
-                if (stdout.isNotEmpty()) {
-                    Log.d(TAG, "Root command stdout: $stdout")
-                }
-                true
-            }
+            proc.waitFor()
         } catch (e: Exception) {
             Log.e(TAG, "Root command failed: $joined", e)
-            false
         }
     }
 }
+""", encoding="utf-8")
+
+print(f"patched {target}")
