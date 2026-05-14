@@ -1,8 +1,0 @@
-* Add group app limits
-* Show all apps in whitelist screen
-* Whitelist all system apps by default
-* Reduce notification clutter
-* Completely rewrite routines for more reliability and better performance
-* Add android backup/restore support
-* Fix some design inconsistencies
-* New Icon based on Dynamic colors

@@ -1,6 +1,0 @@
-* Add Focus mode stats
-* Add focus mode notification progress segments
-* Fix focus mode resetting
-* Restore DND after pause
-* Add continue button in focus mode notification
-* New Icon

@@ -1,8 +1,0 @@
-* Supports running multiple focus routines and app limits at once.
-* Added auto-start for Pomodoro rounds and break intervals.
-* Blocker now starts immediately after reboot before phone unlock.
-* Added a background safety net to prevent focus sessions from stopping.
-* DND now toggles automatically; Pause button is hidden in Strict Mode.
-* Improved accuracy for app usage tracking on newer Android versions.
-* Faster tab switching and smoother screen animations.
-* Added Spanish and updated French translations.

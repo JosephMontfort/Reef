@@ -21,6 +21,7 @@ object WatchdogManager {
     // ── Paths (inside /data/local/tmp so su can always write them) ────────────
     private const val SCRIPT_PATH   = "/data/local/tmp/reef_watchdog.sh"
     private const val SENTINEL_PATH = "/data/local/tmp/reef_watchdog.active"
+    private const val PID_PATH = "/data/local/tmp/reef_watchdog.pid"
 
     // ── Public API ────────────────────────────────────────────────────────────
 
@@ -42,29 +43,46 @@ object WatchdogManager {
 
         val script = buildScript(pkg, svcClass)
 
-        runRoot(
+        val started = runRoot(
             // 1. Write the sentinel so the (possibly already running) script keeps going
             "echo 1 > $SENTINEL_PATH",
             // 2. Write / overwrite the script
-            "cat > $SCRIPT_PATH << 'REEF_EOF'\n$script\nREEF_EOF",
+            """
+            cat > $SCRIPT_PATH << 'REEF_EOF'
+            $script
+            REEF_EOF
+            """.trimIndent(),
             "chmod 755 $SCRIPT_PATH",
-            // 3. Kill any previous instance before starting fresh
-            "pkill -f reef_watchdog 2>/dev/null; true",
+            // 3. Kill any previous watchdog instance using a PID file, not a fuzzy pattern match
+            """
+            if [ -f $PID_PATH ]; then OLD_PID=$(cat $PID_PATH 2>/dev/null); if [ -n "${OLD_PID:-}" ] && kill -0 "$OLD_PID" 2>/dev/null; then kill "$OLD_PID" 2>/dev/null || true; fi; rm -f $PID_PATH; fi
+            """.trimIndent(),
             // 4. Start detached — survives app death
-            "nohup sh $SCRIPT_PATH > /dev/null 2>&1 &"
+            "nohup sh $SCRIPT_PATH > /dev/null 2>&1 & echo $! > $PID_PATH"
         )
-        SessionPersistence.markNuclearRunning(context, true)
-        Log.i(TAG, "Watchdog started")
+        if (started) {
+            SessionPersistence.markNuclearRunning(context, true)
+            Log.i(TAG, "Watchdog started")
+        } else {
+            SessionPersistence.markNuclearRunning(context, false)
+            Log.e(TAG, "Watchdog failed to start")
+        }
     }
 
     /** Stops the watchdog by removing the sentinel file. */
     fun stop(context: Context) {
-        runRoot(
+        val stopped = runRoot(
             "rm -f $SENTINEL_PATH",
-            "pkill -f reef_watchdog 2>/dev/null; true"
+            """
+            if [ -f $PID_PATH ]; then OLD_PID=$(cat $PID_PATH 2>/dev/null); if [ -n "${OLD_PID:-}" ] && kill -0 "$OLD_PID" 2>/dev/null; then kill "$OLD_PID" 2>/dev/null || true; fi; rm -f $PID_PATH; fi
+            """.trimIndent()
         )
         SessionPersistence.markNuclearRunning(context, false)
-        Log.i(TAG, "Watchdog stopped")
+        if (stopped) {
+            Log.i(TAG, "Watchdog stopped")
+        } else {
+            Log.w(TAG, "Watchdog stop command returned a non-zero exit code")
+        }
     }
 
     // ── Internal ──────────────────────────────────────────────────────────────
@@ -89,13 +107,34 @@ done
      * Run a series of shell commands sequentially under `su`.
      * Each string is one shell statement; they are joined with `;`.
      */
-    private fun runRoot(vararg commands: String) {
+    private fun runRoot(vararg commands: String): Boolean {
         val joined = commands.joinToString("; ")
-        try {
+        return try {
             val proc = Runtime.getRuntime().exec(arrayOf("su", "-c", joined))
-            proc.waitFor()
+            val exitCode = proc.waitFor()
+            val stdout = proc.inputStream.bufferedReader().use { it.readText().trim() }
+            val stderr = proc.errorStream.bufferedReader().use { it.readText().trim() }
+            if (exitCode != 0) {
+                Log.e(TAG, buildString {
+                    append("Root command failed (exit=")
+                    append(exitCode)
+                    append("): ")
+                    append(joined)
+                    if (stderr.isNotEmpty()) {
+                        append("\nERR: ")
+                        append(stderr)
+                    }
+                })
+                false
+            } else {
+                if (stdout.isNotEmpty()) {
+                    Log.d(TAG, "Root command stdout: $stdout")
+                }
+                true
+            }
         } catch (e: Exception) {
             Log.e(TAG, "Root command failed: $joined", e)
+            false
         }
     }
 }
