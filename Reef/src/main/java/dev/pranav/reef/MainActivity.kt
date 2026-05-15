@@ -120,8 +120,16 @@ class MainActivity: ComponentActivity() {
             val navBackStackEntry by navController.currentBackStackEntryAsState()
             val currentDestination = navBackStackEntry?.destination
 
-            val whitelistedCount =
-                remember { Whitelist.getWhitelistedLaunchableCount(launcherApps) }
+            var whitelistedCount by remember {
+                mutableIntStateOf(Whitelist.getWhitelistedLaunchableCount(launcherApps))
+            }
+
+            // Refresh count whenever the user returns from the whitelist screen
+            LaunchedEffect(currentDestination) {
+                if (currentDestination?.hasRoute<Screen.Whitelist>() == false) {
+                    whitelistedCount = Whitelist.getWhitelistedLaunchableCount(launcherApps)
+                }
+            }
 
             val selectedNavIndex = remember(currentDestination) {
                 when {

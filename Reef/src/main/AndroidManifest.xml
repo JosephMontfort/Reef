@@ -73,6 +73,15 @@
                 android:value="Monitors foreground app usage to enforce screen time limits without requiring Accessibility Service" />
         </service>
 
+        <!-- Non-root resilience alarm receiver -->
+        <receiver
+            android:name=".util.ResilienceReceiver"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="dev.pranav.reef.RESILIENCE_PING" />
+            </intent-filter>
+        </receiver>
+
         <!-- WindowManager overlay service for persistent home-block focus screen -->
         <service
             android:name=".accessibility.HomeBlockOverlayService"

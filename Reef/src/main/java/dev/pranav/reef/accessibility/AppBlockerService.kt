@@ -47,6 +47,15 @@ class AppBlockerService : android.app.Service() {
         }
     }
 
+    private fun checkForegroundAndBlock() {
+        val pkg = getCurrentForegroundApp() ?: return
+        if (pkg == packageName) return
+        val isAllowed = Whitelist.isWhitelisted(pkg) && pkg != defaultLauncherPkg
+        if (!isAllowed && !HomeBlockOverlayService.isShowing) {
+            HomeBlockOverlayService.start(this)
+        }
+    }
+
     private val appPollRunnable = object : Runnable {
         override fun run() {
             try {
@@ -98,6 +107,15 @@ class AppBlockerService : android.app.Service() {
         promoteToForeground()
         handler.removeCallbacks(appPollRunnable)
         handler.removeCallbacks(routinePollRunnable)
+
+        // Immediately check what's in foreground when service (re)starts —
+        // needed when the nuclear watchdog restarts us while a blocked app
+        // or the launcher is already visible.
+        if (prefs.getBoolean("block_home_screen", false) &&
+            prefs.getBoolean("focus_mode", false)) {
+            handler.post { checkForegroundAndBlock() }
+        }
+
         handler.post(appPollRunnable)
         handler.post(routinePollRunnable)
         scheduleWatcher(this)
@@ -105,11 +123,15 @@ class AppBlockerService : android.app.Service() {
     }
 
     private fun promoteToForeground() {
+        // Suppress the visible monitoring notification during an active focus session —
+        // the FocusModeService already shows a timer notification; this one is redundant.
+        val focusActive = prefs.getBoolean("focus_mode", false)
         val notification = NotificationCompat.Builder(this, APP_BLOCKER_SERVICE_CHANNEL_ID)
             .setSmallIcon(R.drawable.ic_launcher_foreground)
             .setContentTitle(getString(R.string.app_name))
             .setContentText(getString(R.string.blocker_service_running))
-            .setPriority(NotificationCompat.PRIORITY_MIN)
+            .setPriority(if (focusActive) NotificationCompat.PRIORITY_MIN else NotificationCompat.PRIORITY_MIN)
+            .setVisibility(if (focusActive) NotificationCompat.VISIBILITY_SECRET else NotificationCompat.VISIBILITY_SECRET)
             .setOngoing(true)
             .setSilent(true)
             .build()

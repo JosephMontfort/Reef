@@ -19,9 +19,13 @@ import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.rounded.Check
+import androidx.compose.material.icons.rounded.Lock
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Stable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.collectAsState
+import dev.pranav.reef.timer.TimerStateManager
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -61,6 +65,11 @@ fun WhitelistScreen(
 ) {
     val scrollBehavior =
         TopAppBarDefaults.exitUntilCollapsedScrollBehavior(rememberTopAppBarState())
+
+    // Disable edits during an active focus session
+    val timerState by TimerStateManager.state.collectAsState()
+    val sessionActive = timerState.isRunning || timerState.isPaused
+    val effectiveOnToggle: (WhitelistedApp) -> Unit = { if (!sessionActive) onToggle(it) }
 
     Scaffold(
         modifier = Modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
@@ -143,6 +152,41 @@ fun WhitelistScreen(
                 .fillMaxSize()
                 .padding(paddingValues)
         ) {
+            // Session-active lock banner
+            if (sessionActive) {
+                Card(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 8.dp),
+                    colors = CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.errorContainer
+                    )
+                ) {
+                    Row(
+                        modifier = Modifier.padding(12.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Icon(
+                            Icons.Rounded.Lock,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.onErrorContainer,
+                            modifier = Modifier.size(18.dp)
+                        )
+                        Text(
+                            text = "Whitelist cannot be edited during an active focus session.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onErrorContainer
+                        )
+                    }
+                }
+            }
+
+            val listModifier = if (sessionActive)
+                Modifier.fillMaxSize().padding(top = 58.dp) // offset for banner
+            else
+                Modifier.fillMaxSize()
+
             when (uiState) {
                 is AllowedAppsState.Loading -> {
                     ContainedLoadingIndicator(modifier = Modifier.align(Alignment.Center))
@@ -157,7 +201,7 @@ fun WhitelistScreen(
                         )
                     } else {
                         LazyColumn(
-                            modifier = Modifier.fillMaxSize(),
+                            modifier = listModifier,
                             contentPadding = PaddingValues(16.dp)
                         ) {
                             itemsIndexed(
@@ -168,7 +212,8 @@ fun WhitelistScreen(
                                     app = app,
                                     index = index,
                                     listSize = uiState.apps.size,
-                                    onToggle = { onToggle(app) }
+                                    enabled = !sessionActive,
+                                    onToggle = { effectiveOnToggle(app) }
                                 )
                             }
                         }
@@ -184,6 +229,7 @@ fun WhitelistItem(
     app: WhitelistedApp,
     index: Int,
     listSize: Int,
+    enabled: Boolean = true,
     onToggle: () -> Unit
 ) {
     val shape = when {
@@ -217,12 +263,17 @@ fun WhitelistItem(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(vertical = 1.dp),
-            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer),
+            colors = CardDefaults.cardColors(
+                containerColor = if (enabled)
+                    MaterialTheme.colorScheme.surfaceContainer
+                else
+                    MaterialTheme.colorScheme.surfaceContainerLow
+            ),
             shape = shape
         ) {
             ListItem(
                 modifier = Modifier
-                    .clickable(onClick = onToggle)
+                    .clickable(enabled = enabled, onClick = onToggle)
                     .padding(4.dp),
                 headlineContent = {
                     Text(
@@ -241,7 +292,8 @@ fun WhitelistItem(
                 trailingContent = {
                     Checkbox(
                         checked = app.isWhitelisted,
-                        onCheckedChange = { onToggle() }
+                        onCheckedChange = { if (enabled) onToggle() },
+                        enabled = enabled
                     )
                 },
                 colors = ListItemDefaults.colors(containerColor = Color.Transparent)

@@ -214,6 +214,47 @@ fun FocusModeGroup(
     }
 }
 
+import dev.pranav.reef.util.WatchdogManager
+
+@Composable
+private fun SettingsToggleRow(
+    icon: ImageVector,
+    title: String,
+    subtitle: String,
+    checked: Boolean,
+    onCheckedChange: (Boolean) -> Unit
+) {
+    Surface(
+        color = MaterialTheme.colorScheme.surfaceContainer,
+        shape = MaterialTheme.shapes.small,
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 12.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                modifier = Modifier.weight(1f)
+            ) {
+                Icon(imageVector = icon, contentDescription = null,
+                    tint = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.size(20.dp))
+                Column {
+                    Text(title, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
+                    Text(subtitle, style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+            }
+            Switch(checked = checked, onCheckedChange = onCheckedChange)
+        }
+    }
+}
+
 @OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 fun SimpleFocusSetup(onStart: (TimerConfig) -> Unit) {
@@ -222,6 +263,8 @@ fun SimpleFocusSetup(onStart: (TimerConfig) -> Unit) {
     var isStrictMode by remember { mutableStateOf(false) }
     var blockHomeScreen by remember { mutableStateOf(prefs.getBoolean("block_home_screen", false)) }
     var nuclearWatchdog by remember { mutableStateOf(prefs.getBoolean("nuclear_watchdog_enabled", false)) }
+    var resilienceMode by remember { mutableStateOf(prefs.getBoolean("resilience_mode_enabled", false)) }
+    var preventStop by remember { mutableStateOf(prefs.getBoolean("prevent_stop_session", false)) }
     val context = LocalContext.current
 
     Column(
@@ -339,126 +382,51 @@ fun SimpleFocusSetup(onStart: (TimerConfig) -> Unit) {
             }
         }
 
-        Spacer(Modifier.height(32.dp))
+        Spacer(Modifier.height(24.dp))
 
-        Row(
+        // ── Session toggles ───────────────────────────────────────────────────
+        Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 16.dp, vertical = 16.dp),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
+                .padding(horizontal = 16.dp),
+            verticalArrangement = Arrangement.spacedBy(2.dp)
         ) {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                Icon(
-                    imageVector = if (isStrictMode) Icons.Rounded.Lock else Icons.Rounded.LockOpen,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.onSurface
-                )
-                Column {
-                    Text(
-                        text = if (isStrictMode) stringResource(R.string.strict_mode) else stringResource(
-                            R.string.flexible_mode
-                        ),
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.SemiBold
-                    )
-                    Text(
-                        text = if (isStrictMode) stringResource(R.string.no_pausing_allowed) else stringResource(
-                            R.string.pause_resume_anytime
-                        ),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
-            }
-            Switch(
+            SettingsToggleRow(
+                icon = if (isStrictMode) Icons.Rounded.Lock else Icons.Rounded.LockOpen,
+                title = if (isStrictMode) stringResource(R.string.strict_mode) else stringResource(R.string.flexible_mode),
+                subtitle = if (isStrictMode) stringResource(R.string.no_pausing_allowed) else stringResource(R.string.pause_resume_anytime),
                 checked = isStrictMode,
                 onCheckedChange = { isStrictMode = it }
             )
-        }
-
-        // Block Home Screen toggle
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 16.dp, vertical = 8.dp),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                Icon(
-                    imageVector = Icons.Rounded.Lock,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.onSurface
-                )
-                Column {
-                    Text(
-                        text = stringResource(R.string.block_home_screen),
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.SemiBold
-                    )
-                    Text(
-                        text = stringResource(R.string.block_home_screen_desc),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
-            }
-            Switch(
+            SettingsToggleRow(
+                icon = Icons.Rounded.PhoneLocked,
+                title = stringResource(R.string.block_home_screen),
+                subtitle = stringResource(R.string.block_home_screen_desc),
                 checked = blockHomeScreen,
-                onCheckedChange = {
-                    blockHomeScreen = it
-                    prefs.edit().putBoolean("block_home_screen", it).apply()
-                }
+                onCheckedChange = { blockHomeScreen = it; prefs.edit().putBoolean("block_home_screen", it).apply() }
             )
-        }
-
-        // Nuclear watchdog toggle
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 16.dp, vertical = 8.dp),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                modifier = Modifier.weight(1f)
-            ) {
-                Icon(
-                    imageVector = Icons.Rounded.Security,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.onSurface
-                )
-                Column {
-                    Text(
-                        text = stringResource(R.string.nuclear_watchdog),
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.SemiBold
-                    )
-                    Text(
-                        text = stringResource(R.string.nuclear_watchdog_desc),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
-            }
-            Switch(
+            SettingsToggleRow(
+                icon = Icons.Rounded.Block,
+                title = stringResource(R.string.prevent_stop_session),
+                subtitle = stringResource(R.string.prevent_stop_session_desc),
+                checked = preventStop,
+                onCheckedChange = { preventStop = it; prefs.edit().putBoolean("prevent_stop_session", it).apply() }
+            )
+            SettingsToggleRow(
+                icon = Icons.Rounded.Refresh,
+                title = stringResource(R.string.resilience_mode),
+                subtitle = stringResource(R.string.resilience_mode_desc),
+                checked = resilienceMode,
+                onCheckedChange = { resilienceMode = it; prefs.edit().putBoolean("resilience_mode_enabled", it).apply() }
+            )
+            SettingsToggleRow(
+                icon = Icons.Rounded.Security,
+                title = stringResource(R.string.nuclear_watchdog),
+                subtitle = stringResource(R.string.nuclear_watchdog_desc),
                 checked = nuclearWatchdog,
                 onCheckedChange = { enabled ->
-                    if (enabled && !dev.pranav.reef.util.WatchdogManager.hasRoot()) {
-                        android.widget.Toast.makeText(
-                            context,
-                            context.getString(R.string.nuclear_watchdog_no_root),
-                            android.widget.Toast.LENGTH_LONG
-                        ).show()
+                    if (enabled && !WatchdogManager.hasRoot()) {
+                        android.widget.Toast.makeText(context, context.getString(R.string.nuclear_watchdog_no_root), android.widget.Toast.LENGTH_LONG).show()
                     } else {
                         nuclearWatchdog = enabled
                         prefs.edit().putBoolean("nuclear_watchdog_enabled", enabled).apply()
@@ -534,6 +502,8 @@ fun PomodoroFocusSetup(onStart: (TimerConfig) -> Unit) {
     var isStrictMode by remember { mutableStateOf(false) }
     var blockHomeScreen by remember { mutableStateOf(prefs.getBoolean("block_home_screen", false)) }
     var nuclearWatchdog by remember { mutableStateOf(prefs.getBoolean("nuclear_watchdog_enabled", false)) }
+    var resilienceMode by remember { mutableStateOf(prefs.getBoolean("resilience_mode_enabled", false)) }
+    var preventStop by remember { mutableStateOf(prefs.getBoolean("prevent_stop_session", false)) }
     val context = LocalContext.current
 
     Column(
@@ -593,117 +563,51 @@ fun PomodoroFocusSetup(onStart: (TimerConfig) -> Unit) {
             }
         }
 
-        Spacer(modifier = Modifier.height(32.dp))
+        Spacer(modifier = Modifier.height(24.dp))
 
-        Row(
+        // ── Session toggles ───────────────────────────────────────────────────
+        Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(vertical = 16.dp),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
+                .padding(horizontal = 16.dp),
+            verticalArrangement = Arrangement.spacedBy(2.dp)
         ) {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                Icon(
-                    imageVector = if (isStrictMode) Icons.Outlined.Lock else Icons.Rounded.LockOpen,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.onSurface
-                )
-                Column {
-                    Text(
-                        text = if (isStrictMode) stringResource(R.string.strict_mode) else stringResource(R.string.flexible_mode),
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.SemiBold
-                    )
-                    Text(
-                        text = if (isStrictMode) stringResource(R.string.no_pausing_allowed) else stringResource(R.string.pause_resume_anytime),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
-            }
-            Switch(checked = isStrictMode, onCheckedChange = { isStrictMode = it })
-        }
-
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(vertical = 8.dp),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                Icon(
-                    imageVector = Icons.Rounded.Lock,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.onSurface
-                )
-                Column {
-                    Text(
-                        text = stringResource(R.string.block_home_screen),
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.SemiBold
-                    )
-                    Text(
-                        text = stringResource(R.string.block_home_screen_desc),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
-            }
-            Switch(
-                checked = blockHomeScreen,
-                onCheckedChange = {
-                    blockHomeScreen = it
-                    prefs.edit().putBoolean("block_home_screen", it).apply()
-                }
+            SettingsToggleRow(
+                icon = if (isStrictMode) Icons.Outlined.Lock else Icons.Rounded.LockOpen,
+                title = if (isStrictMode) stringResource(R.string.strict_mode) else stringResource(R.string.flexible_mode),
+                subtitle = if (isStrictMode) stringResource(R.string.no_pausing_allowed) else stringResource(R.string.pause_resume_anytime),
+                checked = isStrictMode,
+                onCheckedChange = { isStrictMode = it }
             )
-        }
-
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 16.dp, vertical = 8.dp),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                modifier = Modifier.weight(1f)
-            ) {
-                Icon(
-                    imageVector = Icons.Rounded.Security,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.onSurface
-                )
-                Column {
-                    Text(
-                        text = stringResource(R.string.nuclear_watchdog),
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.SemiBold
-                    )
-                    Text(
-                        text = stringResource(R.string.nuclear_watchdog_desc),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
-            }
-            Switch(
+            SettingsToggleRow(
+                icon = Icons.Rounded.PhoneLocked,
+                title = stringResource(R.string.block_home_screen),
+                subtitle = stringResource(R.string.block_home_screen_desc),
+                checked = blockHomeScreen,
+                onCheckedChange = { blockHomeScreen = it; prefs.edit().putBoolean("block_home_screen", it).apply() }
+            )
+            SettingsToggleRow(
+                icon = Icons.Rounded.Block,
+                title = stringResource(R.string.prevent_stop_session),
+                subtitle = stringResource(R.string.prevent_stop_session_desc),
+                checked = preventStop,
+                onCheckedChange = { preventStop = it; prefs.edit().putBoolean("prevent_stop_session", it).apply() }
+            )
+            SettingsToggleRow(
+                icon = Icons.Rounded.Refresh,
+                title = stringResource(R.string.resilience_mode),
+                subtitle = stringResource(R.string.resilience_mode_desc),
+                checked = resilienceMode,
+                onCheckedChange = { resilienceMode = it; prefs.edit().putBoolean("resilience_mode_enabled", it).apply() }
+            )
+            SettingsToggleRow(
+                icon = Icons.Rounded.Security,
+                title = stringResource(R.string.nuclear_watchdog),
+                subtitle = stringResource(R.string.nuclear_watchdog_desc),
                 checked = nuclearWatchdog,
                 onCheckedChange = { enabled ->
-                    if (enabled && !dev.pranav.reef.util.WatchdogManager.hasRoot()) {
-                        android.widget.Toast.makeText(
-                            context,
-                            context.getString(R.string.nuclear_watchdog_no_root),
-                            android.widget.Toast.LENGTH_LONG
-                        ).show()
+                    if (enabled && !WatchdogManager.hasRoot()) {
+                        android.widget.Toast.makeText(context, context.getString(R.string.nuclear_watchdog_no_root), android.widget.Toast.LENGTH_LONG).show()
                     } else {
                         nuclearWatchdog = enabled
                         prefs.edit().putBoolean("nuclear_watchdog_enabled", enabled).apply()
@@ -941,6 +845,8 @@ fun RunningTimerView(
                     .padding(horizontal = 16.dp, vertical = 24.dp)
                     .fillMaxWidth(0.95f),
                 isPaused = isPaused,
+                isBreak = isBreak,
+                preventStop = prefs.getBoolean("prevent_stop_session", false),
                 onPause = onPause,
                 onResume = onResume,
                 onCancel = onCancel,
@@ -967,67 +873,81 @@ fun RunningTimerActions(
     modifier: Modifier = Modifier,
     isPaused: Boolean,
     isStrictMode: Boolean,
+    isBreak: Boolean = false,
+    preventStop: Boolean = false,
     onPause: () -> Unit,
     onResume: () -> Unit,
     onCancel: () -> Unit,
     onRestart: () -> Unit = {}
 ) {
+    var showPreventStopDialog by remember { mutableStateOf(false) }
+
+    if (showPreventStopDialog) {
+        AlertDialog(
+            onDismissRequest = { showPreventStopDialog = false },
+            icon = { Icon(Icons.Rounded.Block, contentDescription = null) },
+            title = { Text(stringResource(R.string.prevent_stop_title)) },
+            text = { Text(stringResource(R.string.prevent_stop_message)) },
+            confirmButton = {
+                TextButton(onClick = { showPreventStopDialog = false }) {
+                    Text(stringResource(R.string.ok))
+                }
+            }
+        )
+    }
+
     Row(
         modifier = modifier,
         horizontalArrangement = Arrangement.spacedBy(2.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        IconToggleButton(
-            checked = isPaused,
-            onCheckedChange = { if (isPaused) onResume() else onPause() },
-            shapes = IconButtonDefaults.toggleableShapes(
-                shape = if (isPaused) IconButtonDefaults.largeSquareShape else IconButtonDefaults.extraLargeSquareShape,
-            ),
-            colors = IconButtonDefaults.filledIconToggleButtonColors(
-                MaterialTheme.colorScheme.secondaryContainer,
-                checkedContainerColor = MaterialTheme.colorScheme.surfaceContainer
-            ),
-            modifier = Modifier
-                .height(62.dp)
-                .aspectRatio(0.89f)
-        ) {
-            Icon(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(9.dp),
-                imageVector = if (isPaused) Icons.Rounded.PlayArrow else Icons.Rounded.Pause,
-                contentDescription = if (isPaused) stringResource(R.string.resume) else stringResource(
-                    R.string.pause
+        // Pause button — hidden during breaks
+        if (!isBreak) {
+            IconToggleButton(
+                checked = isPaused,
+                onCheckedChange = { if (isPaused) onResume() else onPause() },
+                shapes = IconButtonDefaults.toggleableShapes(
+                    shape = if (isPaused) IconButtonDefaults.largeSquareShape else IconButtonDefaults.extraLargeSquareShape,
+                ),
+                colors = IconButtonDefaults.filledIconToggleButtonColors(
+                    MaterialTheme.colorScheme.secondaryContainer,
+                    checkedContainerColor = MaterialTheme.colorScheme.surfaceContainer
+                ),
+                modifier = Modifier.height(62.dp).aspectRatio(0.89f)
+            ) {
+                Icon(
+                    modifier = Modifier.fillMaxSize().padding(9.dp),
+                    imageVector = if (isPaused) Icons.Rounded.PlayArrow else Icons.Rounded.Pause,
+                    contentDescription = if (isPaused) stringResource(R.string.resume) else stringResource(R.string.pause)
                 )
-            )
+            }
         }
 
         if (!isStrictMode) {
             Button(
-                onClick = { onCancel() },
-                modifier = Modifier
-                    .weight(1f)
-                    .padding(12.dp)
-                    .height(84.dp),
+                onClick = {
+                    if (preventStop && !isBreak) showPreventStopDialog = true
+                    else onCancel()
+                },
+                modifier = Modifier.weight(1f).padding(12.dp).height(84.dp),
                 shapes = ButtonDefaults.shapes(),
             ) {
-                Text(
-                    text = stringResource(R.string.cancel),
-                    style = MaterialTheme.typography.titleLargeEmphasized
-                )
+                Text(stringResource(R.string.cancel), style = MaterialTheme.typography.titleLargeEmphasized)
             }
 
-            OutlinedButton(
-                onClick = onRestart,
-                shapes = ButtonDefaults.shapes(shape = ButtonDefaults.elevatedShape),
-                modifier = Modifier.size(60.dp)
-            ) {
-                Icon(
-                    modifier = Modifier
-                        .fillMaxSize(),
-                    imageVector = Icons.Filled.Replay,
-                    contentDescription = stringResource(R.string.reset)
-                )
+            // Reset button — only during focus phase, not during breaks
+            if (!isBreak) {
+                OutlinedButton(
+                    onClick = onRestart,
+                    shapes = ButtonDefaults.shapes(shape = ButtonDefaults.elevatedShape),
+                    modifier = Modifier.size(60.dp)
+                ) {
+                    Icon(
+                        modifier = Modifier.fillMaxSize(),
+                        imageVector = Icons.Filled.Replay,
+                        contentDescription = stringResource(R.string.reset)
+                    )
+                }
             }
         }
     }

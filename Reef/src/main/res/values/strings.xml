@@ -428,7 +428,13 @@
     <string name="nav_focus">Focus</string>
     <string name="nav_settings">Settings</string>
 
-    <string name="nuclear_watchdog">Nuclear Mode</string>
-    <string name="nuclear_watchdog_desc">Requires root. Runs a watchdog script that restarts Reef if it is force-stopped during a focus session.</string>
+    <string name="nuclear_watchdog">Nuclear Mode (Root)</string>
+    <string name="nuclear_watchdog_desc">Runs a root watchdog script that revives Reef within 1 second if force-stopped.</string>
     <string name="nuclear_watchdog_no_root">Root access is required for Nuclear Mode. Grant root access to Reef and try again.</string>
+    <string name="resilience_mode">Resilience Mode</string>
+    <string name="resilience_mode_desc">Uses a repeating alarm to restart Reef if killed. Works without root.</string>
+    <string name="prevent_stop_session">Prevent Stopping Session</string>
+    <string name="prevent_stop_session_desc">Blocks cancelling the session during focus time. You can still cancel during breaks.</string>
+    <string name="prevent_stop_title">Session in progress</string>
+    <string name="prevent_stop_message">You cannot cancel a focus session while it\'s running. Wait for a break to stop.</string>
 </resources>

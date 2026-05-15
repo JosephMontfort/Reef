@@ -88,6 +88,10 @@ class WhitelistViewModel(
     }
 
     private fun updateFilteredList() {
+        // Keep the Loading spinner visible if app list hasn't loaded yet,
+        // even if the user has already typed in the search field.
+        if (allApps.isEmpty() && _uiState.value is AllowedAppsState.Loading) return
+
         val query = _searchQuery.value
         val hide = _hideSystemApps.value
         val filtered = allApps

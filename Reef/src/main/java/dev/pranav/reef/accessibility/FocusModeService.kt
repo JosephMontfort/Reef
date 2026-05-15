@@ -31,6 +31,7 @@ import dev.pranav.reef.timer.TimerStateManager
 import dev.pranav.reef.util.*
 import dev.pranav.reef.util.WhitelistAppCache
 import dev.pranav.reef.util.WatchdogManager
+import dev.pranav.reef.util.ResilienceManager
 import dev.pranav.reef.util.SessionPersistence
 import java.util.Locale
 import java.util.concurrent.TimeUnit
@@ -215,6 +216,9 @@ class FocusModeService : Service() {
         // Start nuclear watchdog if enabled
         if (prefs.getBoolean("nuclear_watchdog_enabled", false)) {
             Thread { WatchdogManager.start(this) }.start()
+        }
+        if (prefs.getBoolean("resilience_mode_enabled", false)) {
+            ResilienceManager.start(this)
         }
 
         postNotification(
@@ -470,6 +474,7 @@ class FocusModeService : Service() {
         restoreDND()
         SessionPersistence.clear(this)
         Thread { WatchdogManager.stop(this) }.start()
+        ResilienceManager.stop(this)
         showFocusCompleteNotification()
         stopSelf()
     }
