@@ -35,6 +35,8 @@ import dev.pranav.reef.R
 import dev.pranav.reef.navigation.Screen
 import dev.pranav.reef.ui.Typography.DMSerif
 import dev.pranav.reef.util.prefs
+import dev.pranav.reef.util.WatchdogManager
+import androidx.compose.ui.graphics.vector.ImageVector
 
 sealed interface TimerConfig {
     data class Simple(val minutes: Int, val strictMode: Boolean): TimerConfig
@@ -214,7 +216,6 @@ fun FocusModeGroup(
     }
 }
 
-import dev.pranav.reef.util.WatchdogManager
 
 @Composable
 private fun SettingsToggleRow(
