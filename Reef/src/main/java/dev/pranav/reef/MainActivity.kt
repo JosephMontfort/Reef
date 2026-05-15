@@ -571,43 +571,35 @@ private fun ReefBottomNavBar(
     selectedItem: Int,
     onItemSelected: (Int) -> Unit
 ) {
+    val items = listOf(
+        Triple(Icons.Rounded.Home,        stringResource(R.string.nav_home),     0),
+        Triple(Icons.Rounded.BarChart,    stringResource(R.string.nav_stats),    1),
+        Triple(Icons.Rounded.EmojiNature, stringResource(R.string.nav_focus),    2),
+        Triple(Icons.Rounded.Settings,    stringResource(R.string.nav_settings), 3),
+    )
+
     Surface(
         modifier = Modifier.fillMaxWidth(),
         color = MaterialTheme.colorScheme.surfaceContainer,
-        shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp)
+        tonalElevation = 3.dp,
+        shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp)
     ) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(top = 8.dp, bottom = 8.dp, start = 16.dp, end = 16.dp)
+                .padding(horizontal = 8.dp, vertical = 4.dp)
                 .navigationBarsPadding(),
-            horizontalArrangement = Arrangement.SpaceAround,
+            horizontalArrangement = Arrangement.SpaceEvenly,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            BottomNavItem(
-                icon = Icons.Rounded.Home,
-                label = stringResource(R.string.nav_home),
-                selected = selectedItem == 0,
-                onClick = { onItemSelected(0) }
-            )
-            BottomNavItem(
-                icon = Icons.Rounded.BarChart,
-                label = stringResource(R.string.nav_stats),
-                selected = selectedItem == 1,
-                onClick = { onItemSelected(1) }
-            )
-            BottomNavItem(
-                icon = Icons.Rounded.EmojiNature,
-                label = stringResource(R.string.nav_focus),
-                selected = selectedItem == 2,
-                onClick = { onItemSelected(2) }
-            )
-            BottomNavItem(
-                icon = Icons.Rounded.Settings,
-                label = stringResource(R.string.nav_settings),
-                selected = selectedItem == 3,
-                onClick = { onItemSelected(3) }
-            )
+            items.forEach { (icon, label, index) ->
+                BottomNavItem(
+                    icon = icon,
+                    label = label,
+                    selected = selectedItem == index,
+                    onClick = { onItemSelected(index) }
+                )
+            }
         }
     }
 }
@@ -619,35 +611,56 @@ private fun BottomNavItem(
     selected: Boolean,
     onClick: () -> Unit
 ) {
+    val primaryContainer = MaterialTheme.colorScheme.primaryContainer
+    val onPrimaryContainer = MaterialTheme.colorScheme.onPrimaryContainer
+    val onSurfaceVariant = MaterialTheme.colorScheme.onSurfaceVariant
+
+    val iconTint by androidx.compose.animation.animateColorAsState(
+        targetValue = if (selected) onPrimaryContainer else onSurfaceVariant,
+        animationSpec = androidx.compose.animation.core.tween(220),
+        label = "navIconTint"
+    )
+    val bgColor by androidx.compose.animation.animateColorAsState(
+        targetValue = if (selected) primaryContainer else androidx.compose.ui.graphics.Color.Transparent,
+        animationSpec = androidx.compose.animation.core.tween(220),
+        label = "navBgColor"
+    )
+    val textColor by androidx.compose.animation.animateColorAsState(
+        targetValue = if (selected) onPrimaryContainer else onSurfaceVariant,
+        animationSpec = androidx.compose.animation.core.tween(220),
+        label = "navTextColor"
+    )
+
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
         modifier = Modifier
-            .clip(RoundedCornerShape(16.dp))
+            .clip(RoundedCornerShape(20.dp))
             .clickable(onClick = onClick)
-            .then(
-                if (selected) {
-                    Modifier
-                        .background(
-                            MaterialTheme.colorScheme.primaryContainer,
-                            RoundedCornerShape(16.dp)
-                        )
-                        .padding(horizontal = 16.dp, vertical = 8.dp)
-                } else {
-                    Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
-                }
-            )
+            .padding(vertical = 4.dp, horizontal = 4.dp)
+            .widthIn(min = 64.dp)
     ) {
-        Icon(
-            icon,
-            contentDescription = label,
-            modifier = Modifier.size(24.dp),
-            tint = if (selected) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurfaceVariant
-        )
-        Spacer(Modifier.height(4.dp))
+        // Pill indicator around the icon
+        Box(
+            contentAlignment = Alignment.Center,
+            modifier = Modifier
+                .clip(RoundedCornerShape(50))
+                .background(bgColor)
+                .padding(horizontal = 16.dp, vertical = 6.dp)
+        ) {
+            Icon(
+                icon,
+                contentDescription = label,
+                modifier = Modifier.size(22.dp),
+                tint = iconTint
+            )
+        }
+        Spacer(Modifier.height(2.dp))
         Text(
             text = label,
             style = MaterialTheme.typography.labelSmall,
-            color = if (selected) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurfaceVariant
+            color = textColor,
+            maxLines = 1
         )
+        Spacer(Modifier.height(2.dp))
     }
 }
