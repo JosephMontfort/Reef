@@ -294,21 +294,16 @@ fun FocusTimerDisplay(size: Dp = 180.dp) {
     val timerState by TimerStateManager.state.collectAsState()
     val context = LocalContext.current
 
-    // Seed from persisted phase duration so the arc is always relative to the
-    // full phase, not just whatever remains when the composable first appears.
+    // Seed from persisted phase duration — stable across overlay show/hide cycles.
+    // Only ever grows (when a new phase starts with a longer duration), never shrinks,
+    // so the arc position never jumps backward.
     val sessionTotal = remember {
         val persisted = SessionPersistence.restore(context)?.phaseDurationMs ?: 0L
         mutableLongStateOf(persisted.coerceAtLeast(timerState.timeRemaining))
     }
-
-    LaunchedEffect(timerState.isRunning) {
-        if (timerState.isRunning && sessionTotal.longValue == 0L) {
-            sessionTotal.longValue = timerState.timeRemaining
-        }
-    }
-    // When a new phase starts timeRemaining jumps UP — update the total
-    LaunchedEffect(timerState.pomodoroPhase) {
-        if (timerState.timeRemaining > 0L) {
+    LaunchedEffect(timerState.timeRemaining) {
+        // Only update total when remaining EXCEEDS current total (new phase started)
+        if (timerState.timeRemaining > sessionTotal.longValue + 5_000L) {
             sessionTotal.longValue = timerState.timeRemaining
         }
     }

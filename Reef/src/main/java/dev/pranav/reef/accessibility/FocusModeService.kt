@@ -66,8 +66,29 @@ class FocusModeService : Service() {
     // call notificationManager.notify() ~once per minute during ticking, not every second.
     private var lastNotifiedMinute = -1L
 
+    private val screenOnReceiver = object : android.content.BroadcastReceiver() {
+        override fun onReceive(context: android.content.Context?, intent: android.content.Intent?) {
+            if (intent?.action == android.content.Intent.ACTION_SCREEN_ON) {
+                val state = TimerStateManager.state.value
+                if (state.isRunning) {
+                    // Reanchor phaseEndEpoch from current remaining and rebuild notification
+                    // so the chronometer never shows stale/negative values after screen-on
+                    phaseEndEpoch = System.currentTimeMillis() + state.timeRemaining
+                    postNotification(
+                        title = getNotificationTitle(),
+                        isRunning = true,
+                        showPauseButton = !state.isStrictMode && !TimerStateManager.isInBreak(),
+                        timeLeft = state.timeRemaining
+                    )
+                }
+            }
+        }
+    }
+
     override fun onCreate() {
         super.onCreate()
+        registerReceiver(screenOnReceiver, android.content.IntentFilter(android.content.Intent.ACTION_SCREEN_ON))
+    }
         if (!isPrefsInitialized) {
             createDeviceProtectedStorageContext().also { ctx ->
                 prefs = ctx.getSharedPreferences("prefs", MODE_PRIVATE)
@@ -123,6 +144,7 @@ class FocusModeService : Service() {
         if (FocusStats.activeSession != null) {
             FocusStats.endSession(isCompleted = false)
         }
+        runCatching { unregisterReceiver(screenOnReceiver) }
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
             stopForeground(STOP_FOREGROUND_REMOVE)
@@ -245,12 +267,13 @@ class FocusModeService : Service() {
         prefs.edit { putBoolean("focus_mode", true) }
         enableDNDIfNeeded()
 
-        // Persist immediately so a force-kill right after start is recoverable
+        // Persist immediately + save session start epoch for grace-period keying
         SessionPersistence.saveRunning(
             this, TimerStateManager.state.value,
             focusTimeMillis, focusTimeMillis,
             TimerStateManager.getPomodoroConfig()
         )
+        prefs.edit { putLong("session_start_epoch", System.currentTimeMillis()) }
 
         // Pre-warm whitelist app icon cache for instant overlay display
         WhitelistAppCache.refresh(this)
@@ -366,11 +389,7 @@ class FocusModeService : Service() {
                 broadcastTimerUpdate(formatTime(millisUntilFinished))
 
                 val minute = millisUntilFinished / 60_000L
-                // Update notification every 10 seconds so the time-remaining tag
-                // stays fresh even when the screen is off (chronometer handles
-                // the second-by-second counting in the status bar chip).
-                val tenSec = millisUntilFinished / 10_000L
-                if (minute != lastNotifiedMinute || tenSec % 3 == 0L) {
+                if (minute != lastNotifiedMinute) {
                     lastNotifiedMinute = minute
                     postNotification(
                         title = getNotificationTitle(),

@@ -12,7 +12,9 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.ui.draw.clip
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Replay
 import androidx.compose.material.icons.outlined.BarChart
@@ -725,7 +727,6 @@ fun RunningTimerView(
     val isPomodoroMode = state.isPomodoroMode
     val currentCycle = state.currentCycle
     val totalCycles = state.totalCycles
-    val isBreak = timerState == "SHORT_BREAK" || timerState == "LONG_BREAK"
 
     Box(
         modifier = Modifier
@@ -787,6 +788,7 @@ fun RunningTimerView(
                 else -> stringResource(R.string.focus_label)
             }
 
+            val isBreak = timerState == "SHORT_BREAK" || timerState == "LONG_BREAK"
 
             if (isBreak) {
                 Icon(
@@ -845,9 +847,9 @@ fun RunningTimerView(
                 )
             }
 
-            // Allowed apps quick-launch strip — always visible during a session
+            // Allowed apps quick-launch strip — hidden during breaks
             val allowedApps = WhitelistAppCache.apps
-            if (allowedApps.isNotEmpty()) {
+            if (allowedApps.isNotEmpty() && !isBreak) {
                 Spacer(Modifier.height(20.dp))
                 Text(
                     text = stringResource(R.string.allowed_apps_label),
@@ -895,6 +897,9 @@ fun RunningTimerView(
             }
         }
 
+        val isBreak =
+            state.pomodoroPhase == PomodoroPhase.SHORT_BREAK || state.pomodoroPhase == PomodoroPhase.LONG_BREAK
+
         if (!isStrictMode || (isPaused && isBreak)) {
             RunningTimerActions(
                 modifier = Modifier
@@ -941,16 +946,20 @@ fun RunningTimerActions(
 ) {
     var showPreventStopDialog by remember { mutableStateOf(false) }
 
-    // 5-second grace countdown: starts at 5 and counts to 0 on first composition.
-    // While > 0 the cancel button shows "Cancel" with a left-sweep progress bar.
-    // Once it hits 0 it switches permanently to "Stop Focusing".
-    var graceSecondsLeft by remember { mutableIntStateOf(if (preventStop) 5 else 0) }
-    LaunchedEffect(Unit) {
-        if (preventStop && graceSecondsLeft > 0) {
-            while (graceSecondsLeft > 0) {
-                kotlinx.coroutines.delay(1_000)
-                graceSecondsLeft--
-            }
+    // Grace countdown: only runs once right after a session starts.
+    // We key it to the session's phaseEndEpoch so navigating away and back
+    // doesn't restart it. Once elapsed it stays at 0 for the session lifetime.
+    val sessionStartKey = remember { prefs.getLong("session_start_epoch", 0L) }
+    val graceWindowMs = 5_000L
+    val elapsedSinceStart = System.currentTimeMillis() - sessionStartKey
+    var graceSecondsLeft by remember(sessionStartKey) {
+        val remaining = ((graceWindowMs - elapsedSinceStart) / 1_000L).coerceIn(0L, 5L)
+        mutableIntStateOf(if (preventStop && remaining > 0) remaining.toInt() else 0)
+    }
+    LaunchedEffect(sessionStartKey) {
+        while (graceSecondsLeft > 0) {
+            kotlinx.coroutines.delay(1_000)
+            graceSecondsLeft = (graceSecondsLeft - 1).coerceAtLeast(0)
         }
     }
     val graceFraction by animateFloatAsState(
@@ -964,7 +973,7 @@ fun RunningTimerActions(
             onDismissRequest = { showPreventStopDialog = false },
             icon = { Icon(Icons.Rounded.Block, contentDescription = null) },
             title = { Text(stringResource(R.string.prevent_stop_title)) },
-            text = { Text(stringResource(R.string.prevent_stop_session_desc)) },
+            text = { Text(stringResource(R.string.prevent_stop_message)) },
             confirmButton = {
                 TextButton(onClick = { showPreventStopDialog = false }) {
                     Text(stringResource(R.string.ok))
@@ -1015,7 +1024,7 @@ fun RunningTimerActions(
                     Button(
                         onClick = {
                             when {
-                                inGrace -> onCancel() // 5s grace — allow immediate cancel
+                                inGrace -> onCancel()
                                 preventStop && !isBreak -> showPreventStopDialog = true
                                 else -> onCancel()
                             }
@@ -1023,20 +1032,21 @@ fun RunningTimerActions(
                         modifier = Modifier.fillMaxSize(),
                         shapes = ButtonDefaults.shapes(),
                     ) {
-                        Box(contentAlignment = Alignment.CenterStart, modifier = Modifier.fillMaxWidth()) {
-                            // Sweep overlay — right-to-left during grace period
+                        Box(contentAlignment = Alignment.Center, modifier = Modifier.fillMaxSize()) {
+                            // Pill-clipped sweep overlay right→left during grace
                             if (inGrace && graceFraction > 0f) {
                                 Box(
                                     modifier = Modifier
+                                        .matchParentSize()
+                                        .clip(MaterialTheme.shapes.extraLarge)
+                                        .background(MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.18f))
                                         .fillMaxWidth(graceFraction)
-                                        .fillMaxHeight()
-                                        .background(MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.15f))
                                 )
                             }
                             Text(
-                                text = if (inGrace) "$buttonLabel (${graceSecondsLeft}s)" else buttonLabel,
-                                style = MaterialTheme.typography.titleLargeEmphasized,
-                                modifier = Modifier.align(Alignment.Center)
+                                text = if (inGrace) "${stringResource(R.string.cancel)} (${graceSecondsLeft}s)"
+                                else stringResource(R.string.stop_focusing),
+                                style = MaterialTheme.typography.titleLargeEmphasized
                             )
                         }
                     }
