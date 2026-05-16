@@ -88,7 +88,6 @@ class FocusModeService : Service() {
     override fun onCreate() {
         super.onCreate()
         registerReceiver(screenOnReceiver, android.content.IntentFilter(android.content.Intent.ACTION_SCREEN_ON))
-    }
         if (!isPrefsInitialized) {
             createDeviceProtectedStorageContext().also { ctx ->
                 prefs = ctx.getSharedPreferences("prefs", MODE_PRIVATE)
