@@ -725,6 +725,7 @@ fun RunningTimerView(
     val isPomodoroMode = state.isPomodoroMode
     val currentCycle = state.currentCycle
     val totalCycles = state.totalCycles
+    val isBreak = timerState == "SHORT_BREAK" || timerState == "LONG_BREAK"
 
     Box(
         modifier = Modifier
@@ -786,7 +787,6 @@ fun RunningTimerView(
                 else -> stringResource(R.string.focus_label)
             }
 
-            val isBreak = timerState == "SHORT_BREAK" || timerState == "LONG_BREAK"
 
             if (isBreak) {
                 Icon(
@@ -894,7 +894,6 @@ fun RunningTimerView(
                 }
             }
         }
-            state.pomodoroPhase == PomodoroPhase.SHORT_BREAK || state.pomodoroPhase == PomodoroPhase.LONG_BREAK
 
         if (!isStrictMode || (isPaused && isBreak)) {
             RunningTimerActions(
@@ -965,7 +964,7 @@ fun RunningTimerActions(
             onDismissRequest = { showPreventStopDialog = false },
             icon = { Icon(Icons.Rounded.Block, contentDescription = null) },
             title = { Text(stringResource(R.string.prevent_stop_title)) },
-            text = { Text(stringResource(R.string.prevent_stop_message)) },
+            text = { Text(stringResource(R.string.prevent_stop_session_desc)) },
             confirmButton = {
                 TextButton(onClick = { showPreventStopDialog = false }) {
                     Text(stringResource(R.string.ok))
