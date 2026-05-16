@@ -436,5 +436,8 @@
     <string name="prevent_stop_session">Prevent Stopping Session</string>
     <string name="prevent_stop_session_desc">Blocks cancelling the session during focus time. You can still cancel during breaks.</string>
     <string name="prevent_stop_title">Session in progress</string>
-    <string name="prevent_stop_message">You cannot cancel a focus session while it\'s running. Wait for a break to stop.</string>
+    <string name="skip_break">Skip Break</string>
+    <string name="stop_focusing">Stop Focusing</string>
+</resources>
+</resources>
 </resources>

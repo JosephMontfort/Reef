@@ -1,8 +1,16 @@
 package dev.pranav.reef.timer
 
+import android.content.Intent
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.animateContentSize
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
+import androidx.compose.foundation.Image
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
@@ -15,6 +23,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.nestedscroll.nestedScroll
@@ -26,6 +35,7 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -34,9 +44,9 @@ import androidx.navigation.compose.rememberNavController
 import dev.pranav.reef.R
 import dev.pranav.reef.navigation.Screen
 import dev.pranav.reef.ui.Typography.DMSerif
-import dev.pranav.reef.util.prefs
 import dev.pranav.reef.util.WatchdogManager
-import androidx.compose.ui.graphics.vector.ImageVector
+import dev.pranav.reef.util.WhitelistAppCache
+import dev.pranav.reef.util.prefs
 
 sealed interface TimerConfig {
     data class Simple(val minutes: Int, val strictMode: Boolean): TimerConfig
@@ -62,6 +72,7 @@ fun TimerContent(
     onPauseTimer: () -> Unit,
     onResumeTimer: () -> Unit,
     onCancelTimer: () -> Unit,
+    onSkipTimer: () -> Unit,
     onRestartTimer: () -> Unit
 ) {
     val showRunningView = isTimerRunning || isPaused
@@ -118,6 +129,7 @@ fun TimerContent(
                         onPause = onPauseTimer,
                         onResume = onResumeTimer,
                         onCancel = onCancelTimer,
+                        onSkip = onSkipTimer,
                         onRestart = onRestartTimer
                     )
                 } else {
@@ -155,13 +167,10 @@ fun TimerScreen(
     onPauseTimer: () -> Unit,
     onResumeTimer: () -> Unit,
     onCancelTimer: () -> Unit,
+    onSkipTimer: () -> Unit = {},
     onRestartTimer: () -> Unit,
 ) {
-    Box(
-        modifier = Modifier
-            .fillMaxSize(),
-        contentAlignment = Alignment.Center
-    ) {
+    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
         TimerContent(
             navController = rememberNavController(),
             isTimerRunning = isTimerRunning,
@@ -173,6 +182,7 @@ fun TimerScreen(
             onPauseTimer = onPauseTimer,
             onResumeTimer = onResumeTimer,
             onCancelTimer = onCancelTimer,
+            onSkipTimer = onSkipTimer,
             onRestartTimer = onRestartTimer
         )
     }
@@ -215,7 +225,6 @@ fun FocusModeGroup(
         }
     }
 }
-
 
 @Composable
 private fun SettingsToggleRow(
@@ -709,6 +718,7 @@ fun RunningTimerView(
     onPause: () -> Unit,
     onResume: () -> Unit,
     onCancel: () -> Unit,
+    onSkip: () -> Unit = {},
     onRestart: () -> Unit = {}
 ) {
     val state by TimerStateManager.state.collectAsState()
@@ -834,9 +844,56 @@ fun RunningTimerView(
                         .padding(horizontal = 32.dp)
                 )
             }
-        }
 
-        val isBreak =
+            // Allowed apps quick-launch strip — always visible during a session
+            val allowedApps = WhitelistAppCache.apps
+            if (allowedApps.isNotEmpty()) {
+                Spacer(Modifier.height(20.dp))
+                Text(
+                    text = stringResource(R.string.allowed_apps_label),
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier
+                        .align(Alignment.Start)
+                        .padding(horizontal = 24.dp)
+                )
+                Spacer(Modifier.height(8.dp))
+                val launchContext = LocalContext.current
+                LazyRow(
+                    contentPadding = PaddingValues(horizontal = 20.dp),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    items(allowedApps, key = { it.packageName }) { app ->
+                        Column(
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            modifier = Modifier
+                                .clickable {
+                                    launchContext.packageManager
+                                        .getLaunchIntentForPackage(app.packageName)
+                                        ?.apply { addFlags(Intent.FLAG_ACTIVITY_NEW_TASK) }
+                                        ?.let { launchContext.startActivity(it) }
+                                }
+                                .padding(4.dp)
+                        ) {
+                            Image(
+                                bitmap = app.icon,
+                                contentDescription = app.label,
+                                modifier = Modifier.size(44.dp)
+                            )
+                            Spacer(Modifier.height(4.dp))
+                            Text(
+                                text = app.label,
+                                style = MaterialTheme.typography.labelSmall,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                                modifier = Modifier.widthIn(max = 56.dp)
+                            )
+                        }
+                    }
+                }
+            }
+        }
             state.pomodoroPhase == PomodoroPhase.SHORT_BREAK || state.pomodoroPhase == PomodoroPhase.LONG_BREAK
 
         if (!isStrictMode || (isPaused && isBreak)) {
@@ -851,6 +908,7 @@ fun RunningTimerView(
                 onPause = onPause,
                 onResume = onResume,
                 onCancel = onCancel,
+                onSkip = onSkip,
                 onRestart = onRestart,
                 isStrictMode = isStrictMode
             )
@@ -879,9 +937,28 @@ fun RunningTimerActions(
     onPause: () -> Unit,
     onResume: () -> Unit,
     onCancel: () -> Unit,
+    onSkip: () -> Unit = {},
     onRestart: () -> Unit = {}
 ) {
     var showPreventStopDialog by remember { mutableStateOf(false) }
+
+    // 5-second grace countdown: starts at 5 and counts to 0 on first composition.
+    // While > 0 the cancel button shows "Cancel" with a left-sweep progress bar.
+    // Once it hits 0 it switches permanently to "Stop Focusing".
+    var graceSecondsLeft by remember { mutableIntStateOf(if (preventStop) 5 else 0) }
+    LaunchedEffect(Unit) {
+        if (preventStop && graceSecondsLeft > 0) {
+            while (graceSecondsLeft > 0) {
+                kotlinx.coroutines.delay(1_000)
+                graceSecondsLeft--
+            }
+        }
+    }
+    val graceFraction by animateFloatAsState(
+        targetValue = if (graceSecondsLeft > 0) graceSecondsLeft / 5f else 0f,
+        animationSpec = tween(900),
+        label = "graceFraction"
+    )
 
     if (showPreventStopDialog) {
         AlertDialog(
@@ -897,58 +974,103 @@ fun RunningTimerActions(
         )
     }
 
-    Row(
-        modifier = modifier,
-        horizontalArrangement = Arrangement.spacedBy(2.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        // Pause button — hidden during breaks
-        if (!isBreak) {
-            IconToggleButton(
-                checked = isPaused,
-                onCheckedChange = { if (isPaused) onResume() else onPause() },
-                shapes = IconButtonDefaults.toggleableShapes(
-                    shape = if (isPaused) IconButtonDefaults.largeSquareShape else IconButtonDefaults.extraLargeSquareShape,
-                ),
-                colors = IconButtonDefaults.filledIconToggleButtonColors(
-                    MaterialTheme.colorScheme.secondaryContainer,
-                    checkedContainerColor = MaterialTheme.colorScheme.surfaceContainer
-                ),
-                modifier = Modifier.height(62.dp).aspectRatio(0.89f)
-            ) {
-                Icon(
-                    modifier = Modifier.fillMaxSize().padding(9.dp),
-                    imageVector = if (isPaused) Icons.Rounded.PlayArrow else Icons.Rounded.Pause,
-                    contentDescription = if (isPaused) stringResource(R.string.resume) else stringResource(R.string.pause)
-                )
+    Column(modifier = modifier, verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(2.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            // Pause/resume — hidden during breaks
+            if (!isBreak) {
+                IconToggleButton(
+                    checked = isPaused,
+                    onCheckedChange = { if (isPaused) onResume() else onPause() },
+                    shapes = IconButtonDefaults.toggleableShapes(
+                        shape = if (isPaused) IconButtonDefaults.largeSquareShape
+                        else IconButtonDefaults.extraLargeSquareShape,
+                    ),
+                    colors = IconButtonDefaults.filledIconToggleButtonColors(
+                        MaterialTheme.colorScheme.secondaryContainer,
+                        checkedContainerColor = MaterialTheme.colorScheme.surfaceContainer
+                    ),
+                    modifier = Modifier.height(62.dp).aspectRatio(0.89f)
+                ) {
+                    Icon(
+                        modifier = Modifier.fillMaxSize().padding(9.dp),
+                        imageVector = if (isPaused) Icons.Rounded.PlayArrow else Icons.Rounded.Pause,
+                        contentDescription = if (isPaused) stringResource(R.string.resume)
+                        else stringResource(R.string.pause)
+                    )
+                }
+            }
+
+            if (!isStrictMode) {
+                // Cancel / Stop Focusing button with optional grace countdown overlay
+                Box(
+                    modifier = Modifier.weight(1f).padding(12.dp).height(84.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    val inGrace = graceSecondsLeft > 0
+                    val buttonLabel = if (inGrace) stringResource(R.string.cancel)
+                    else stringResource(R.string.stop_focusing)
+
+                    Button(
+                        onClick = {
+                            when {
+                                inGrace -> onCancel() // 5s grace — allow immediate cancel
+                                preventStop && !isBreak -> showPreventStopDialog = true
+                                else -> onCancel()
+                            }
+                        },
+                        modifier = Modifier.fillMaxSize(),
+                        shapes = ButtonDefaults.shapes(),
+                    ) {
+                        Box(contentAlignment = Alignment.CenterStart, modifier = Modifier.fillMaxWidth()) {
+                            // Sweep overlay — right-to-left during grace period
+                            if (inGrace && graceFraction > 0f) {
+                                Box(
+                                    modifier = Modifier
+                                        .fillMaxWidth(graceFraction)
+                                        .fillMaxHeight()
+                                        .background(MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.15f))
+                                )
+                            }
+                            Text(
+                                text = if (inGrace) "$buttonLabel (${graceSecondsLeft}s)" else buttonLabel,
+                                style = MaterialTheme.typography.titleLargeEmphasized,
+                                modifier = Modifier.align(Alignment.Center)
+                            )
+                        }
+                    }
+                }
+
+                // Reset — only during focus phase
+                if (!isBreak) {
+                    OutlinedButton(
+                        onClick = onRestart,
+                        shapes = ButtonDefaults.shapes(shape = ButtonDefaults.elevatedShape),
+                        modifier = Modifier.size(60.dp)
+                    ) {
+                        Icon(
+                            modifier = Modifier.fillMaxSize(),
+                            imageVector = Icons.Filled.Replay,
+                            contentDescription = stringResource(R.string.reset)
+                        )
+                    }
+                }
             }
         }
 
-        if (!isStrictMode) {
-            Button(
-                onClick = {
-                    if (preventStop && !isBreak) showPreventStopDialog = true
-                    else onCancel()
-                },
-                modifier = Modifier.weight(1f).padding(12.dp).height(84.dp),
-                shapes = ButtonDefaults.shapes(),
+        // Skip break button — shown during break phases
+        if (isBreak) {
+            OutlinedButton(
+                onClick = onSkip,
+                modifier = Modifier.fillMaxWidth(),
+                shapes = ButtonDefaults.shapes()
             ) {
-                Text(stringResource(R.string.cancel), style = MaterialTheme.typography.titleLargeEmphasized)
-            }
-
-            // Reset button — only during focus phase, not during breaks
-            if (!isBreak) {
-                OutlinedButton(
-                    onClick = onRestart,
-                    shapes = ButtonDefaults.shapes(shape = ButtonDefaults.elevatedShape),
-                    modifier = Modifier.size(60.dp)
-                ) {
-                    Icon(
-                        modifier = Modifier.fillMaxSize(),
-                        imageVector = Icons.Filled.Replay,
-                        contentDescription = stringResource(R.string.reset)
-                    )
-                }
+                Icon(Icons.Rounded.SkipNext, contentDescription = null,
+                    modifier = Modifier.size(18.dp))
+                Spacer(Modifier.width(6.dp))
+                Text(stringResource(R.string.skip_break))
             }
         }
     }

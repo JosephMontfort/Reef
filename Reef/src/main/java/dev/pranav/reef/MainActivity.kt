@@ -337,6 +337,7 @@ class MainActivity: ComponentActivity() {
                                 onPauseTimer = { pauseFocusMode() },
                                 onResumeTimer = { resumeFocusMode() },
                                 onCancelTimer = { cancelFocusMode() },
+                                onSkipTimer = { skipBreak() },
                                 onRestartTimer = { restartFocusMode() }
                             )
                         }
@@ -516,6 +517,12 @@ class MainActivity: ComponentActivity() {
         })
     }
 
+    private fun skipBreak() {
+        startService(Intent(this, FocusModeService::class.java).apply {
+            action = FocusModeService.ACTION_SKIP_BREAK
+        })
+    }
+
     private fun pauseFocusMode() {
         startService(Intent(this, FocusModeService::class.java).apply {
             action = FocusModeService.ACTION_PAUSE
@@ -535,7 +542,10 @@ class MainActivity: ComponentActivity() {
     }
 
     private fun cancelFocusMode() {
-        stopService(Intent(this, FocusModeService::class.java))
+        // Use the new ACTION_STOP which handles watchdog/resilience/persistence cleanup
+        startService(Intent(this, FocusModeService::class.java).apply {
+            action = FocusModeService.ACTION_STOP
+        })
         prefs.edit {
             putBoolean("focus_mode", false)
             remove("strict_mode")

@@ -41,6 +41,7 @@ import dev.pranav.reef.accessibility.UsageTracker
 import dev.pranav.reef.timer.TimerStateManager
 import dev.pranav.reef.ui.ReefTheme
 import dev.pranav.reef.util.WhitelistAppCache
+import dev.pranav.reef.util.SessionPersistence
 import dev.pranav.reef.util.applyDefaults
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -291,19 +292,23 @@ fun BlockedScreen(
 @Composable
 fun FocusTimerDisplay(size: Dp = 180.dp) {
     val timerState by TimerStateManager.state.collectAsState()
+    val context = LocalContext.current
 
-    // Derive a "session total" from the first non-zero snapshot so the ring
-    // knows where 100% is.  We cache it in a remembered ref so it persists
-    // across recompositions.
-    val sessionTotal = remember { androidx.compose.runtime.mutableLongStateOf(0L) }
+    // Seed from persisted phase duration so the arc is always relative to the
+    // full phase, not just whatever remains when the composable first appears.
+    val sessionTotal = remember {
+        val persisted = SessionPersistence.restore(context)?.phaseDurationMs ?: 0L
+        mutableLongStateOf(persisted.coerceAtLeast(timerState.timeRemaining))
+    }
+
     LaunchedEffect(timerState.isRunning) {
         if (timerState.isRunning && sessionTotal.longValue == 0L) {
             sessionTotal.longValue = timerState.timeRemaining
         }
     }
-    // Reset when a new session starts (timeRemaining jumps up)
-    LaunchedEffect(timerState.timeRemaining) {
-        if (timerState.timeRemaining > sessionTotal.longValue) {
+    // When a new phase starts timeRemaining jumps UP — update the total
+    LaunchedEffect(timerState.pomodoroPhase) {
+        if (timerState.timeRemaining > 0L) {
             sessionTotal.longValue = timerState.timeRemaining
         }
     }
