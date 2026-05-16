@@ -30,6 +30,7 @@ class App : Application(), Configuration.Provider {
         AppLimits.init(this)
         Whitelist.init(this)
         FocusStats.init(this)
+        FocusStats.initCheckpoint(this)
         WebsiteBlocklist.init(this)
 
         // Start the UsageStats-based app blocker immediately

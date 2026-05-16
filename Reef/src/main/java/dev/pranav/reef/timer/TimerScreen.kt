@@ -25,6 +25,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.graphics.Color
@@ -429,7 +430,7 @@ fun SimpleFocusSetup(onStart: (TimerConfig) -> Unit) {
                 title = stringResource(R.string.resilience_mode),
                 subtitle = stringResource(R.string.resilience_mode_desc),
                 checked = resilienceMode,
-                onCheckedChange = { resilienceMode = it; prefs.edit().putBoolean("resilience_mode_enabled", it).apply() }
+                onCheckedChange = { resilienceMode = it; prefs.edit().putBoolean("resilience_mode_enabled", it).apply(); if (it && nuclearWatchdog) { nuclearWatchdog = false; prefs.edit().putBoolean("nuclear_watchdog_enabled", false).apply() } }
             )
             SettingsToggleRow(
                 icon = Icons.Rounded.Security,
@@ -442,6 +443,7 @@ fun SimpleFocusSetup(onStart: (TimerConfig) -> Unit) {
                     } else {
                         nuclearWatchdog = enabled
                         prefs.edit().putBoolean("nuclear_watchdog_enabled", enabled).apply()
+                        if (enabled && resilienceMode) { resilienceMode = false; prefs.edit().putBoolean("resilience_mode_enabled", false).apply() }
                     }
                 }
             )
@@ -610,7 +612,7 @@ fun PomodoroFocusSetup(onStart: (TimerConfig) -> Unit) {
                 title = stringResource(R.string.resilience_mode),
                 subtitle = stringResource(R.string.resilience_mode_desc),
                 checked = resilienceMode,
-                onCheckedChange = { resilienceMode = it; prefs.edit().putBoolean("resilience_mode_enabled", it).apply() }
+                onCheckedChange = { resilienceMode = it; prefs.edit().putBoolean("resilience_mode_enabled", it).apply(); if (it && nuclearWatchdog) { nuclearWatchdog = false; prefs.edit().putBoolean("nuclear_watchdog_enabled", false).apply() } }
             )
             SettingsToggleRow(
                 icon = Icons.Rounded.Security,
@@ -623,6 +625,7 @@ fun PomodoroFocusSetup(onStart: (TimerConfig) -> Unit) {
                     } else {
                         nuclearWatchdog = enabled
                         prefs.edit().putBoolean("nuclear_watchdog_enabled", enabled).apply()
+                        if (enabled && resilienceMode) { resilienceMode = false; prefs.edit().putBoolean("resilience_mode_enabled", false).apply() }
                     }
                 }
             )
@@ -1033,14 +1036,15 @@ fun RunningTimerActions(
                         shapes = ButtonDefaults.shapes(),
                     ) {
                         Box(contentAlignment = Alignment.Center, modifier = Modifier.fillMaxSize()) {
-                            // Pill-clipped sweep overlay right→left during grace
                             if (inGrace && graceFraction > 0f) {
-                                Box(
+                                LinearProgressIndicator(
+                                    progress = { graceFraction },
                                     modifier = Modifier
                                         .matchParentSize()
-                                        .clip(MaterialTheme.shapes.extraLarge)
-                                        .background(MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.18f))
-                                        .fillMaxWidth(graceFraction)
+                                        .clip(MaterialTheme.shapes.extraLarge),
+                                    color = MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.25f),
+                                    trackColor = androidx.compose.ui.graphics.Color.Transparent,
+                                    strokeCap = StrokeCap.Round
                                 )
                             }
                             Text(

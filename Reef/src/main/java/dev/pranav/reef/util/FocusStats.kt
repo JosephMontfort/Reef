@@ -75,16 +75,61 @@ object FocusStats {
         activePhase = null
     }
 
+    // ── Force-stop-safe minute accumulator ───────────────────────────────────
+    // Written to disk every minute during ticking. On session end (normal or
+    // force-stopped), these accumulated minutes are added to the session record
+    // even if activePhase is stale/null.
+    private var checkpointFile: File? = null
+    private var accumulatedFocusMs: Long = 0L
+
+    fun initCheckpoint(context: Context) {
+        checkpointFile = File(context.filesDir, "focus_checkpoint.json")
+        accumulatedFocusMs = checkpointFile?.let {
+            if (it.exists()) it.readText().toLongOrNull() ?: 0L else 0L
+        } ?: 0L
+    }
+
+    fun tickFocusMinute(ms: Long) {
+        if (activePhase?.type != PhaseType.FOCUS) return
+        accumulatedFocusMs += ms
+        runCatching { checkpointFile?.writeText(accumulatedFocusMs.toString()) }
+    }
+
+    fun clearCheckpoint() {
+        accumulatedFocusMs = 0L
+        runCatching { checkpointFile?.delete() }
+    }
+
     fun endSession(isCompleted: Boolean) {
         endPhase(isCompleted)
-        val session = activeSession ?: return
-        val closed = session.copy(
-            endTimestamp = System.currentTimeMillis(),
-            isCompleted = isCompleted
-        )
-        _sessions.value =
-            (listOf(closed) + _sessions.value).sortedByDescending { it.startTimestamp }
+        val session = activeSession ?: run {
+            if (accumulatedFocusMs > 0L) {
+                val now = System.currentTimeMillis()
+                val stub = FocusSession(
+                    id = UUID.randomUUID().toString(),
+                    startTimestamp = now - accumulatedFocusMs,
+                    endTimestamp = now,
+                    sessionType = SessionType.SIMPLE,
+                    isCompleted = false,
+                    phases = listOf(PhaseEntry(
+                        type = PhaseType.FOCUS,
+                        startTimestamp = now - accumulatedFocusMs,
+                        endTimestamp = now,
+                        actualDuration = accumulatedFocusMs,
+                        plannedDuration = accumulatedFocusMs,
+                        isCompleted = false
+                    ))
+                )
+                _sessions.value = (listOf(stub) + _sessions.value).sortedByDescending { it.startTimestamp }
+                save()
+            }
+            clearCheckpoint()
+            return
+        }
+        val closed = session.copy(endTimestamp = System.currentTimeMillis(), isCompleted = isCompleted)
+        _sessions.value = (listOf(closed) + _sessions.value).sortedByDescending { it.startTimestamp }
         activeSession = null
+        clearCheckpoint()
         save()
     }
 

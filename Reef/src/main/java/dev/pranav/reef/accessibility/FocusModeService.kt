@@ -58,6 +58,37 @@ class FocusModeService : Service() {
     private val notificationManager by lazy { NotificationManagerCompat.from(this) }
     private val systemNotificationManager by lazy { getSystemService(NOTIFICATION_SERVICE) as NotificationManager }
     private var countDownTimer: CountDownTimer? = null
+    private val tickHandler = android.os.Handler(android.os.Looper.getMainLooper())
+    private val tickRunnable = object : Runnable {
+        override fun run() {
+            val remaining = (phaseEndEpoch - System.currentTimeMillis()).coerceAtLeast(0L)
+            if (!TimerStateManager.state.value.isPaused) {
+                TimerStateManager.updateState { copy(timeRemaining = remaining) }
+                broadcastTimerUpdate(formatTime(remaining))
+                val minute = remaining / 60_000L
+                if (minute != lastNotifiedMinute) {
+                    lastNotifiedMinute = minute
+                    postNotification(
+                        title = getNotificationTitle(),
+                        isRunning = true,
+                        showPauseButton = !TimerStateManager.state.value.isStrictMode && !TimerStateManager.isInBreak(),
+                        timeLeft = remaining
+                    )
+                }
+                if (remaining % 30_000L < 1_100L) {
+                    SessionPersistence.saveRunning(this@FocusModeService, TimerStateManager.state.value, remaining, initialDuration, TimerStateManager.getPomodoroConfig())
+                    if (TimerStateManager.state.value.pomodoroPhase == PomodoroPhase.FOCUS || !TimerStateManager.state.value.isPomodoroMode) {
+                        FocusStats.tickFocusMinute(30_000L)
+                    }
+                }
+            }
+            if (remaining > 0L) {
+                tickHandler.postDelayed(this, 500L)
+            } else {
+                handleTimerComplete()
+            }
+        }
+    }
     private var notificationBuilder: NotificationCompat.Builder? = null
     private var previousInterruptionFilter: Int? = null
     private var initialDuration: Long = 0
@@ -87,12 +118,12 @@ class FocusModeService : Service() {
 
     override fun onCreate() {
         super.onCreate()
-        registerReceiver(screenOnReceiver, android.content.IntentFilter(android.content.Intent.ACTION_SCREEN_ON))
         if (!isPrefsInitialized) {
             createDeviceProtectedStorageContext().also { ctx ->
                 prefs = ctx.getSharedPreferences("prefs", MODE_PRIVATE)
             }
         }
+        registerReceiver(screenOnReceiver, android.content.IntentFilter(android.content.Intent.ACTION_SCREEN_ON))
     }
 
     // ─── Lifecycle ──────────────────────────────────────────────────────────────
@@ -135,6 +166,8 @@ class FocusModeService : Service() {
 
     override fun onDestroy() {
         super.onDestroy()
+        tickHandler.removeCallbacks(tickRunnable)
+        tickHandler.removeCallbacks(tickRunnable)
         countDownTimer?.cancel()
 
         // ── Record partial stats on force-stop so no focused minutes are lost ──
@@ -212,12 +245,14 @@ class FocusModeService : Service() {
         if (!state.isPomodoroMode) return
         if (state.pomodoroPhase != PomodoroPhase.SHORT_BREAK &&
             state.pomodoroPhase != PomodoroPhase.LONG_BREAK) return
+        tickHandler.removeCallbacks(tickRunnable)
         countDownTimer?.cancel()
         FocusStats.endPhase(isCompleted = false)
         transitionPomodoroPhase()
     }
 
     private fun stopSession() {
+        tickHandler.removeCallbacks(tickRunnable)
         countDownTimer?.cancel()
         SessionPersistence.clear(this)
         Thread { WatchdogManager.stop(this) }.start()
@@ -300,6 +335,7 @@ class FocusModeService : Service() {
         // Don't pause during breaks — breaks are unpauseable
         if (state.isPomodoroMode && (state.pomodoroPhase == dev.pranav.reef.timer.PomodoroPhase.SHORT_BREAK || state.pomodoroPhase == dev.pranav.reef.timer.PomodoroPhase.LONG_BREAK)) return
 
+        tickHandler.removeCallbacks(tickRunnable)
         countDownTimer?.cancel()
         TimerStateManager.updateState { copy(isRunning = false, isPaused = true) }
 
@@ -343,6 +379,7 @@ class FocusModeService : Service() {
     }
 
     private fun restartCurrentPhase() {
+        tickHandler.removeCallbacks(tickRunnable)
         countDownTimer?.cancel()
         val currentPhaseType = when (TimerStateManager.state.value.pomodoroPhase) {
             PomodoroPhase.SHORT_BREAK -> PhaseType.SHORT_BREAK
@@ -370,46 +407,16 @@ class FocusModeService : Service() {
     // ─── Countdown ──────────────────────────────────────────────────────────────
 
     private fun startCountdown(timeMillis: Long) {
+        tickHandler.removeCallbacks(tickRunnable)
+        tickHandler.removeCallbacks(tickRunnable)
         countDownTimer?.cancel()
-        // Anchor the chronometer once so it stays accurate even when screen is off
+        // Single source of truth: phaseEndEpoch. Both the in-app timer and the
+        // notification chronometer setWhen() derive remaining from this same value,
+        // eliminating drift between them completely.
         phaseEndEpoch = System.currentTimeMillis() + timeMillis
         lastNotifiedMinute = -1L
-
-        SessionPersistence.saveRunning(
-            this, TimerStateManager.state.value,
-            timeMillis, initialDuration,
-            TimerStateManager.getPomodoroConfig()
-        )
-
-        countDownTimer = object : CountDownTimer(timeMillis, 1000) {
-            override fun onTick(millisUntilFinished: Long) {
-                if (TimerStateManager.state.value.isPaused) return
-                TimerStateManager.updateState { copy(timeRemaining = millisUntilFinished) }
-                broadcastTimerUpdate(formatTime(millisUntilFinished))
-
-                val minute = millisUntilFinished / 60_000L
-                if (minute != lastNotifiedMinute) {
-                    lastNotifiedMinute = minute
-                    postNotification(
-                        title = getNotificationTitle(),
-                        isRunning = true,
-                        showPauseButton = !TimerStateManager.state.value.isStrictMode &&
-                                !TimerStateManager.isInBreak(),
-                        timeLeft = millisUntilFinished
-                    )
-                }
-                // Persist every 30 seconds
-                if (millisUntilFinished % 30_000L < 1_000L) {
-                    SessionPersistence.saveRunning(
-                        this@FocusModeService, TimerStateManager.state.value,
-                        millisUntilFinished, initialDuration,
-                        TimerStateManager.getPomodoroConfig()
-                    )
-                }
-            }
-
-            override fun onFinish() = handleTimerComplete()
-        }.start()
+        SessionPersistence.saveRunning(this, TimerStateManager.state.value, timeMillis, initialDuration, TimerStateManager.getPomodoroConfig())
+        tickHandler.post(tickRunnable)
     }
 
     // ─── Notification ───────────────────────────────────────────────────────────
