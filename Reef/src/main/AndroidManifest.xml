@@ -73,6 +73,18 @@
                 android:value="Monitors foreground app usage to enforce screen time limits without requiring Accessibility Service" />
         </service>
 
+        <!-- Non-root resilience watchdog — runs in separate :watchdog process
+             so Android force-stop of the main process cannot kill it -->
+        <service
+            android:name=".watchdog.WatchdogService"
+            android:exported="false"
+            android:process=":watchdog"
+            android:foregroundServiceType="specialUse">
+            <property
+                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+                android:value="Monitors focus session and revives app if force-stopped" />
+        </service>
+
         <!-- Non-root resilience alarm receiver -->
         <receiver
             android:name=".util.ResilienceReceiver"

@@ -233,7 +233,7 @@ class FocusModeService : Service() {
             Thread { WatchdogManager.start(this) }.start()
         }
         if (prefs.getBoolean("resilience_mode_enabled", false)) {
-            ResilienceManager.start(this)
+            dev.pranav.reef.watchdog.WatchdogService.start(this)
         }
     }
 
@@ -256,7 +256,7 @@ class FocusModeService : Service() {
         countDownTimer?.cancel()
         SessionPersistence.clear(this)
         Thread { WatchdogManager.stop(this) }.start()
-        ResilienceManager.stop(this)
+        dev.pranav.reef.watchdog.WatchdogService.stop(this)
         endSession()
     }
 
@@ -317,7 +317,7 @@ class FocusModeService : Service() {
             Thread { WatchdogManager.start(this) }.start()
         }
         if (prefs.getBoolean("resilience_mode_enabled", false)) {
-            ResilienceManager.start(this)
+            dev.pranav.reef.watchdog.WatchdogService.start(this)
         }
 
         postNotification(
@@ -550,7 +550,7 @@ class FocusModeService : Service() {
         restoreDND()
         SessionPersistence.clear(this)
         Thread { WatchdogManager.stop(this) }.start()
-        ResilienceManager.stop(this)
+        dev.pranav.reef.watchdog.WatchdogService.stop(this)
         showFocusCompleteNotification()
         stopSelf()
     }
