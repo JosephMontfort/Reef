@@ -39,9 +39,31 @@ class BlockerService : AccessibilityService() {
 
     private val screenReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
-            if (intent?.action == Intent.ACTION_SCREEN_OFF) {
-                WebsiteUsageTracker.stopTracking()
+            when (intent?.action) {
+                Intent.ACTION_SCREEN_OFF -> WebsiteUsageTracker.stopTracking()
+                Intent.ACTION_SCREEN_ON, Intent.ACTION_USER_PRESENT -> {
+                    // Revive session on every screen-on — catches force-stop while screen was off
+                    handler.postDelayed({
+                        checkAndReviveSession()
+                    }, 1_500L)
+                }
             }
+        }
+    }
+
+    private fun checkAndReviveSession() {
+        if (!dev.pranav.reef.util.SessionPersistence.hasActiveSession(this)) return
+        val am = getSystemService(ACTIVITY_SERVICE) as android.app.ActivityManager
+        val alive = am.runningAppProcesses?.any {
+            it.processName == packageName &&
+            it.importance <= android.app.ActivityManager.RunningAppProcessInfo.IMPORTANCE_SERVICE
+        } ?: false
+        if (!alive) {
+            try {
+                startForegroundService(Intent(this, FocusModeService::class.java).apply {
+                    action = FocusModeService.ACTION_RESUME_PERSISTED
+                })
+            } catch (e: Exception) { android.util.Log.e("BlockerService", "Revival failed", e) }
         }
     }
 

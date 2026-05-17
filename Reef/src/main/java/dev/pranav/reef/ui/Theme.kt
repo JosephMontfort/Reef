@@ -8,6 +8,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
+import androidx.core.view.WindowCompat
 import dev.pranav.reef.App
 
 // ─── Reef ocean palette — used on pre-Android-12 devices (no dynamic color) ───
@@ -164,18 +165,29 @@ fun ReefTheme(
     content: @Composable () -> Unit
 ) {
     val colorScheme = when {
-        // Android 12+: honour the user's dynamic/wallpaper colour
         Build.VERSION.SDK_INT >= Build.VERSION_CODES.S -> {
             val context = LocalContext.current
             if (darkTheme) dynamicDarkColorScheme(context)
             else           dynamicLightColorScheme(context)
         }
-        // Pre-12: use the hand-crafted Reef ocean palette
         darkTheme -> ReefDarkColorScheme
         else      -> ReefLightColorScheme
     }
 
     App.colorScheme = colorScheme
+
+    // Apply status bar colour to match surface — Material You immersive
+    val view = androidx.compose.ui.platform.LocalView.current
+    if (!view.isInEditMode) {
+        val window = (view.context as? android.app.Activity)?.window
+        window?.let {
+            it.statusBarColor = android.graphics.Color.TRANSPARENT
+            androidx.core.view.WindowCompat.getInsetsController(it, view).apply {
+                isAppearanceLightStatusBars = !darkTheme
+                isAppearanceLightNavigationBars = !darkTheme
+            }
+        }
+    }
 
     MaterialExpressiveTheme(
         colorScheme = colorScheme,

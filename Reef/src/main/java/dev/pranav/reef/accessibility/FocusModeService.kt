@@ -258,7 +258,15 @@ class FocusModeService : Service() {
         SessionPersistence.clear(this)
         Thread { WatchdogManager.stop(this) }.start()
         dev.pranav.reef.watchdog.WatchdogService.stop(this)
-        endSession()
+        // User-cancelled — record partial stats but no congratulations notification
+        TimerStateManager.updateState { copy(isRunning = false, isPaused = false) }
+        prefs.edit { putBoolean("focus_mode", false) }
+        FocusStats.endSession(isCompleted = false)
+        broadcastTimerUpdate("00:00")
+        TimerStateManager.reset()
+        restoreDND()
+        dismissHomeBlockOverlay()
+        stopSelf()
     }
 
     private fun startTimer() {

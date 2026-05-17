@@ -9,6 +9,7 @@ import android.os.Looper
 import android.view.WindowManager
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
@@ -155,22 +156,11 @@ fun HomeBlockScreen(onLaunchApp: (Intent) -> Unit) {
                 .padding(horizontal = 16.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            Spacer(Modifier.height(24.dp))
-
-            // Synced focus timer
-            FocusTimerDisplay(size = 160.dp)
-
-            Spacer(Modifier.height(16.dp))
-            Text(
-                text = stringResource(R.string.home_block_subtitle),
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                textAlign = TextAlign.Center,
-                modifier = Modifier.padding(horizontal = 8.dp)
-            )
             Spacer(Modifier.height(20.dp))
-            HorizontalDivider()
-            Spacer(Modifier.height(12.dp))
+            FocusTimerDisplay(size = 260.dp)
+            Spacer(Modifier.height(28.dp))
+            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+            Spacer(Modifier.height(16.dp))
             Text(
                 text = stringResource(R.string.allowed_apps_label),
                 style = MaterialTheme.typography.labelMedium,
@@ -282,27 +272,19 @@ fun BlockedScreen(
 }
 
 /**
- * Circular countdown ring with a live HH:MM:SS digital readout,
- * fed directly from [TimerStateManager.state] — zero broadcast lag,
- * perfectly synced with the in-app timer.
- *
- * The ring sweeps from full (all time remaining) to empty (0).
- * When the timer is paused the ring pulses slightly to signal the pause.
+ * Circular countdown ring with clock-style tick marks and live readout.
+ * Arc color shifts primary→tertiary→error as time runs short.
  */
 @Composable
-fun FocusTimerDisplay(size: Dp = 180.dp) {
+fun FocusTimerDisplay(size: Dp = 240.dp) {
     val timerState by TimerStateManager.state.collectAsState()
     val context = LocalContext.current
 
-    // Seed from persisted phase duration — stable across overlay show/hide cycles.
-    // Only ever grows (when a new phase starts with a longer duration), never shrinks,
-    // so the arc position never jumps backward.
     val sessionTotal = remember {
         val persisted = SessionPersistence.restore(context)?.phaseDurationMs ?: 0L
         mutableLongStateOf(persisted.coerceAtLeast(timerState.timeRemaining))
     }
     LaunchedEffect(timerState.timeRemaining) {
-        // Only update total when remaining EXCEEDS current total (new phase started)
         if (timerState.timeRemaining > sessionTotal.longValue + 5_000L) {
             sessionTotal.longValue = timerState.timeRemaining
         }
@@ -312,28 +294,32 @@ fun FocusTimerDisplay(size: Dp = 180.dp) {
     val remaining = timerState.timeRemaining.coerceIn(0L, total)
     val rawFraction = remaining.toFloat() / total.toFloat()
 
-    // Animate the sweep so it moves smoothly between 1-second ticks
     val sweepFraction by animateFloatAsState(
         targetValue = rawFraction,
-        animationSpec = tween(durationMillis = 950),
+        animationSpec = tween(950),
         label = "timerSweep"
     )
 
     val colorScheme = MaterialTheme.colorScheme
-    val primaryColor   = colorScheme.primary
-    val trackColor     = colorScheme.surfaceVariant
-    val textColor      = colorScheme.onBackground
-    val subTextColor   = colorScheme.onSurfaceVariant
+    val arcColor by animateColorAsState(
+        targetValue = when {
+            rawFraction > 0.5f -> colorScheme.primary
+            rawFraction > 0.25f -> colorScheme.tertiary
+            else -> colorScheme.error
+        },
+        animationSpec = tween(1500),
+        label = "arcUrgency"
+    )
+    val trackColor = colorScheme.surfaceVariant
+    val tickMajorColor = colorScheme.outline
+    val tickMinorColor = colorScheme.outlineVariant
+    val textColor = colorScheme.onBackground
+    val subTextColor = colorScheme.onSurfaceVariant
 
-    // Format HH:MM:SS
     val totalSeconds = (remaining / 1000L).coerceAtLeast(0L)
-    val h = totalSeconds / 3600
-    val m = (totalSeconds % 3600) / 60
-    val s = totalSeconds % 60
-    val timeText = if (h > 0)
-        String.format(Locale.ROOT, "%d:%02d:%02d", h, m, s)
-    else
-        String.format(Locale.ROOT, "%02d:%02d", m, s)
+    val h = totalSeconds / 3600; val m = (totalSeconds % 3600) / 60; val s = totalSeconds % 60
+    val timeText = if (h > 0) String.format(Locale.ROOT, "%d:%02d:%02d", h, m, s)
+                  else String.format(Locale.ROOT, "%02d:%02d", m, s)
 
     val statusLabel = when {
         !timerState.isRunning && !timerState.isPaused -> "Not started"
@@ -341,64 +327,61 @@ fun FocusTimerDisplay(size: Dp = 180.dp) {
         else -> stringResource(R.string.focus_mode)
     }
 
-    Column(
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.Center
-    ) {
-        Box(
-            contentAlignment = Alignment.Center,
-            modifier = Modifier.size(size)
-        ) {
-            val strokeWidth = with(androidx.compose.ui.platform.LocalDensity.current) { (size * 0.07f).toPx() }
+    Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
+        Box(contentAlignment = Alignment.Center, modifier = Modifier.size(size)) {
+            val density = LocalDensity.current
+            val strokePx = with(density) { (size * 0.065f).toPx() }
+            val radiusPx = with(density) { (size / 2).toPx() }
 
             Canvas(modifier = Modifier.fillMaxSize()) {
-                val inset = strokeWidth / 2f
-                val arcSize = Size(this.size.width - strokeWidth, this.size.height - strokeWidth)
+                val inset = strokePx / 2f
+                val arcSize = Size(this.size.width - strokePx, this.size.height - strokePx)
                 val topLeft = Offset(inset, inset)
+                val center = Offset(this.size.width / 2f, this.size.height / 2f)
 
-                // Track (background ring)
-                drawArc(
-                    color = trackColor,
-                    startAngle = -90f,
-                    sweepAngle = 360f,
-                    useCenter = false,
-                    topLeft = topLeft,
-                    size = arcSize,
-                    style = Stroke(width = strokeWidth, cap = StrokeCap.Round)
-                )
+                // Track
+                drawArc(color = trackColor, startAngle = -90f, sweepAngle = 360f,
+                    useCenter = false, topLeft = topLeft, size = arcSize,
+                    style = Stroke(width = strokePx, cap = StrokeCap.Round))
 
                 // Progress arc
                 if (sweepFraction > 0f) {
-                    drawArc(
-                        color = primaryColor,
-                        startAngle = -90f,
-                        sweepAngle = sweepFraction * 360f,
-                        useCenter = false,
-                        topLeft = topLeft,
-                        size = arcSize,
-                        style = Stroke(width = strokeWidth, cap = StrokeCap.Round)
+                    drawArc(color = arcColor, startAngle = -90f, sweepAngle = sweepFraction * 360f,
+                        useCenter = false, topLeft = topLeft, size = arcSize,
+                        style = Stroke(width = strokePx, cap = StrokeCap.Round))
+                }
+
+                // Clock tick marks — 60 ticks, every 5th is major
+                val tickOuterR = radiusPx - strokePx - with(density) { 6.dp.toPx() }
+                for (i in 0 until 60) {
+                    val isMajor = i % 5 == 0
+                    val angle = Math.toRadians((i * 6 - 90).toDouble())
+                    val tickLen = with(density) { if (isMajor) 10.dp.toPx() else 5.dp.toPx() }
+                    val cos = kotlin.math.cos(angle).toFloat()
+                    val sin = kotlin.math.sin(angle).toFloat()
+                    drawLine(
+                        color = if (isMajor) tickMajorColor else tickMinorColor,
+                        start = Offset(center.x + cos * tickOuterR, center.y + sin * tickOuterR),
+                        end = Offset(center.x + cos * (tickOuterR - tickLen), center.y + sin * (tickOuterR - tickLen)),
+                        strokeWidth = with(density) { if (isMajor) 2.dp.toPx() else 1.dp.toPx() },
+                        cap = StrokeCap.Round
                     )
                 }
             }
 
-            // Digital readout inside the ring
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
                 Text(
                     text = timeText,
-                    fontSize = (size.value * 0.18f).sp,
-                    fontWeight = FontWeight.SemiBold,
+                    fontSize = (size.value * 0.165f).sp,
+                    fontWeight = FontWeight.Bold,
                     fontFamily = FontFamily.Monospace,
                     color = textColor,
-                    letterSpacing = 1.sp
+                    letterSpacing = 1.5.sp
                 )
             }
         }
-
-        Spacer(Modifier.height(8.dp))
-        Text(
-            text = statusLabel,
-            style = MaterialTheme.typography.labelMedium,
-            color = subTextColor
-        )
+        Spacer(Modifier.height(10.dp))
+        Text(text = statusLabel, style = MaterialTheme.typography.labelLarge,
+            color = subTextColor, letterSpacing = 2.sp)
     }
 }
