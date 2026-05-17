@@ -83,10 +83,12 @@ object FocusStats {
     private var accumulatedFocusMs: Long = 0L
 
     fun initCheckpoint(context: Context) {
-        checkpointFile = File(context.filesDir, "focus_checkpoint.json")
-        accumulatedFocusMs = checkpointFile?.let {
-            if (it.exists()) it.readText().toLongOrNull() ?: 0L else 0L
-        } ?: 0L
+        // Use device-protected storage — readable immediately after reboot before unlock
+        val dir = context.createDeviceProtectedStorageContext().filesDir
+        checkpointFile = File(dir, "focus_checkpoint.dat")
+        accumulatedFocusMs = runCatching {
+            checkpointFile?.takeIf { it.exists() }?.readText()?.toLong() ?: 0L
+        }.getOrDefault(0L)
     }
 
     fun tickFocusMinute(ms: Long) {

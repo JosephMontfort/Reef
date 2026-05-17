@@ -51,23 +51,20 @@ class BootReceiver : BroadcastReceiver() {
     }
 
     private fun refreshServices(context: Context) {
-        // Always start the UsageStats-based app blocker — it doesn't need any special
-        // user-granted toggle, only the Usage Access permission.
         AppBlockerService.start(context)
 
-        // Also nudge the accessibility service if the user has it enabled
-        // (needed for website/browser blocking only).
         if (context.isAccessibilityServiceEnabledForBlocker()) {
-            try {
-                context.startService(Intent(context, BlockerService::class.java))
-            } catch (e: Exception) {
-                Log.e("BootReceiver", "Could not nudge BlockerService", e)
-            }
+            try { context.startService(Intent(context, BlockerService::class.java)) }
+            catch (e: Exception) { Log.e("BootReceiver", "Could not nudge BlockerService", e) }
         }
 
-        if (prefs.getBoolean("focus_mode", false)) {
-            val serviceIntent = Intent(context, FocusModeService::class.java)
-            context.startForegroundService(serviceIntent)
+        // Resume persisted session on reboot — compute remaining from phaseEndEpoch so elapsed reboot time is deducted
+        if (dev.pranav.reef.util.SessionPersistence.hasActiveSession(context)) {
+            context.startForegroundService(
+                Intent(context, FocusModeService::class.java).apply {
+                    action = FocusModeService.ACTION_RESUME_PERSISTED
+                }
+            )
         }
     }
 }

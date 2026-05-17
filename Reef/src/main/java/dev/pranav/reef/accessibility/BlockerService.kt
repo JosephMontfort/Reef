@@ -20,6 +20,7 @@ import dev.pranav.reef.R
 import dev.pranav.reef.util.*
 import dev.pranav.reef.util.NotificationHelper.BLOCKER_GROUP_KEY
 import dev.pranav.reef.util.NotificationHelper.createNotificationChannel
+import dev.pranav.reef.accessibility.FocusModeService
 
 /**
  * Accessibility service retained ONLY for website / browser URL-bar blocking.
@@ -118,6 +119,23 @@ class BlockerService : AccessibilityService() {
         }
         registerReceiver(screenReceiver, filter)
         handler.post(websiteLimitPollRunnable)
+
+        // Accessibility services are auto-restarted by Android after force-stop.
+        // Use this to revive any interrupted focus session.
+        handler.postDelayed({
+            if (dev.pranav.reef.util.SessionPersistence.hasActiveSession(this)) {
+                val running = (getSystemService(ACTIVITY_SERVICE) as android.app.ActivityManager)
+                    .runningAppProcesses?.any {
+                        it.processName == packageName &&
+                        it.importance <= android.app.ActivityManager.RunningAppProcessInfo.IMPORTANCE_SERVICE
+                    } ?: false
+                if (!running) {
+                    startForegroundService(Intent(this, FocusModeService::class.java).apply {
+                        action = FocusModeService.ACTION_RESUME_PERSISTED
+                    })
+                }
+            }
+        }, 3_000L)
     }
 
     private fun configureService() {

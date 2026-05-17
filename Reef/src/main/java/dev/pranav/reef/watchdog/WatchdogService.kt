@@ -105,12 +105,22 @@ class WatchdogService : Service() {
 
     private fun reviveMainService() {
         try {
-            val intent = Intent().apply {
-                setClassName(packageName, "$packageName.accessibility.AppBlockerService")
-            }
-            startForegroundService(intent)
+            // Start FocusModeService with RESUME_PERSISTED — this restores the timer
+            // from SessionPersistence (phaseEndEpoch minus now = correct remaining time)
+            // AND starts AppBlockerService as a side-effect via App.onCreate
+            startForegroundService(Intent().apply {
+                setClassName(packageName, "$packageName.accessibility.FocusModeService")
+                action = "dev.pranav.reef.RESUME_PERSISTED"
+            })
         } catch (e: Exception) {
-            Log.e(TAG, "Revive failed", e)
+            Log.e(TAG, "Revive via FocusModeService failed, trying AppBlockerService", e)
+            try {
+                startForegroundService(Intent().apply {
+                    setClassName(packageName, "$packageName.accessibility.AppBlockerService")
+                })
+            } catch (e2: Exception) {
+                Log.e(TAG, "Revive failed completely", e2)
+            }
         }
     }
 

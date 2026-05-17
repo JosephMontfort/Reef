@@ -123,6 +123,7 @@ class FocusModeService : Service() {
                 prefs = ctx.getSharedPreferences("prefs", MODE_PRIVATE)
             }
         }
+        FocusStats.initCheckpoint(this)
         registerReceiver(screenOnReceiver, android.content.IntentFilter(android.content.Intent.ACTION_SCREEN_ON))
     }
 
