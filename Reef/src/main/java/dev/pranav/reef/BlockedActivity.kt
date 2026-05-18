@@ -9,22 +9,31 @@ import android.os.Looper
 import android.view.WindowManager
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.compose.animation.Crossfade
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.Pause
+import androidx.compose.material.icons.rounded.PlayArrow
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
@@ -38,6 +47,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import dev.pranav.reef.accessibility.FocusModeService
 import dev.pranav.reef.accessibility.UsageTracker
 import dev.pranav.reef.timer.TimerStateManager
 import dev.pranav.reef.ui.ReefTheme
@@ -272,9 +282,22 @@ fun BlockedScreen(
 }
 
 /**
- * Circular countdown ring with clock-style tick marks and live readout.
- * Arc color shifts primary→tertiary→error as time runs short.
+ * Non-linear arc: first 50% of elapsed time sweeps 70% of the arc (feels fast),
+ * next 25% sweeps 15% (medium), final 25% sweeps 15% (slow) — creates urgency illusion.
+ * Actual clock readout is always truthful.
  */
+private fun nonLinearArcFraction(rawFraction: Float): Float {
+    // rawFraction = remaining/total (1.0=full, 0.0=empty)
+    // elapsed = 1 - rawFraction
+    val elapsed = 1f - rawFraction.coerceIn(0f, 1f)
+    val visual = when {
+        elapsed <= 0.5f  -> elapsed * (0.70f / 0.50f)          // 0→0.5 maps to 0→0.70
+        elapsed <= 0.75f -> 0.70f + (elapsed - 0.50f) * (0.15f / 0.25f) // 0.5→0.75 → 0.70→0.85
+        else             -> 0.85f + (elapsed - 0.75f) * (0.15f / 0.25f) // 0.75→1.0 → 0.85→1.0
+    }
+    return (1f - visual).coerceIn(0f, 1f) // back to remaining fraction
+}
+
 @Composable
 fun FocusTimerDisplay(size: Dp = 240.dp) {
     val timerState by TimerStateManager.state.collectAsState()
@@ -285,17 +308,17 @@ fun FocusTimerDisplay(size: Dp = 240.dp) {
         mutableLongStateOf(persisted.coerceAtLeast(timerState.timeRemaining))
     }
     LaunchedEffect(timerState.timeRemaining) {
-        if (timerState.timeRemaining > sessionTotal.longValue + 5_000L) {
+        if (timerState.timeRemaining > sessionTotal.longValue + 5_000L)
             sessionTotal.longValue = timerState.timeRemaining
-        }
     }
 
     val total = sessionTotal.longValue.coerceAtLeast(1L)
     val remaining = timerState.timeRemaining.coerceIn(0L, total)
     val rawFraction = remaining.toFloat() / total.toFloat()
+    val visualFraction = nonLinearArcFraction(rawFraction)
 
     val sweepFraction by animateFloatAsState(
-        targetValue = rawFraction,
+        targetValue = visualFraction,
         animationSpec = tween(950),
         label = "timerSweep"
     )
@@ -303,31 +326,25 @@ fun FocusTimerDisplay(size: Dp = 240.dp) {
     val colorScheme = MaterialTheme.colorScheme
     val arcColor by animateColorAsState(
         targetValue = when {
-            rawFraction > 0.5f -> colorScheme.primary
+            rawFraction > 0.5f  -> colorScheme.primary
             rawFraction > 0.25f -> colorScheme.tertiary
-            else -> colorScheme.error
+            else                -> colorScheme.error
         },
         animationSpec = tween(1500),
         label = "arcUrgency"
     )
-    val trackColor = colorScheme.surfaceVariant
-    val tickMajorColor = colorScheme.outline
-    val tickMinorColor = colorScheme.outlineVariant
-    val textColor = colorScheme.onBackground
-    val subTextColor = colorScheme.onSurfaceVariant
 
     val totalSeconds = (remaining / 1000L).coerceAtLeast(0L)
     val h = totalSeconds / 3600; val m = (totalSeconds % 3600) / 60; val s = totalSeconds % 60
     val timeText = if (h > 0) String.format(Locale.ROOT, "%d:%02d:%02d", h, m, s)
                   else String.format(Locale.ROOT, "%02d:%02d", m, s)
 
-    val statusLabel = when {
-        !timerState.isRunning && !timerState.isPaused -> "Not started"
-        timerState.isPaused -> "Paused"
-        else -> stringResource(R.string.focus_mode)
-    }
+    val isPaused = timerState.isPaused
 
-    Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
+    Column(
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center
+    ) {
         Box(contentAlignment = Alignment.Center, modifier = Modifier.size(size)) {
             val density = LocalDensity.current
             val strokePx = with(density) { (size * 0.065f).toPx() }
@@ -339,19 +356,20 @@ fun FocusTimerDisplay(size: Dp = 240.dp) {
                 val topLeft = Offset(inset, inset)
                 val center = Offset(this.size.width / 2f, this.size.height / 2f)
 
-                // Track
-                drawArc(color = trackColor, startAngle = -90f, sweepAngle = 360f,
+                drawArc(
+                    color = colorScheme.surfaceVariant, startAngle = -90f, sweepAngle = 360f,
                     useCenter = false, topLeft = topLeft, size = arcSize,
-                    style = Stroke(width = strokePx, cap = StrokeCap.Round))
-
-                // Progress arc
+                    style = Stroke(width = strokePx, cap = StrokeCap.Round)
+                )
                 if (sweepFraction > 0f) {
-                    drawArc(color = arcColor, startAngle = -90f, sweepAngle = sweepFraction * 360f,
+                    drawArc(
+                        color = arcColor, startAngle = -90f,
+                        sweepAngle = sweepFraction * 360f,
                         useCenter = false, topLeft = topLeft, size = arcSize,
-                        style = Stroke(width = strokePx, cap = StrokeCap.Round))
+                        style = Stroke(width = strokePx, cap = StrokeCap.Round)
+                    )
                 }
-
-                // Clock tick marks — 60 ticks, every 5th is major
+                // Clock ticks
                 val tickOuterR = radiusPx - strokePx - with(density) { 6.dp.toPx() }
                 for (i in 0 until 60) {
                     val isMajor = i % 5 == 0
@@ -360,7 +378,7 @@ fun FocusTimerDisplay(size: Dp = 240.dp) {
                     val cos = kotlin.math.cos(angle).toFloat()
                     val sin = kotlin.math.sin(angle).toFloat()
                     drawLine(
-                        color = if (isMajor) tickMajorColor else tickMinorColor,
+                        color = if (isMajor) colorScheme.outline else colorScheme.outlineVariant,
                         start = Offset(center.x + cos * tickOuterR, center.y + sin * tickOuterR),
                         end = Offset(center.x + cos * (tickOuterR - tickLen), center.y + sin * (tickOuterR - tickLen)),
                         strokeWidth = with(density) { if (isMajor) 2.dp.toPx() else 1.dp.toPx() },
@@ -369,19 +387,73 @@ fun FocusTimerDisplay(size: Dp = 240.dp) {
                 }
             }
 
-            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            // Centre: time + play/pause button
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
                 Text(
                     text = timeText,
                     fontSize = (size.value * 0.165f).sp,
                     fontWeight = FontWeight.Bold,
                     fontFamily = FontFamily.Monospace,
-                    color = textColor,
+                    color = colorScheme.onBackground,
                     letterSpacing = 1.5.sp
                 )
+
+                // YouTube-style animated play/pause
+                val pauseScale by animateFloatAsState(
+                    targetValue = if (isPaused) 1.15f else 1f,
+                    animationSpec = spring(dampingRatio = 0.4f, stiffness = 400f),
+                    label = "pauseScale"
+                )
+                Box(
+                    contentAlignment = Alignment.Center,
+                    modifier = Modifier
+                        .size(40.dp)
+                        .scale(pauseScale)
+                        .clip(CircleShape)
+                        .background(colorScheme.primaryContainer.copy(alpha = 0.85f))
+                        .clickable {
+                            context.startService(
+                                Intent(context, FocusModeService::class.java).apply {
+                                    action = if (isPaused) FocusModeService.ACTION_RESUME
+                                             else FocusModeService.ACTION_PAUSE
+                                }
+                            )
+                        }
+                ) {
+                    Crossfade(targetState = isPaused, label = "playPauseIcon") { paused ->
+                        Icon(
+                            imageVector = if (paused) Icons.Rounded.PlayArrow else Icons.Rounded.Pause,
+                            contentDescription = if (paused) "Resume" else "Pause",
+                            tint = colorScheme.onPrimaryContainer,
+                            modifier = Modifier.size(22.dp)
+                        )
+                    }
+                }
             }
         }
-        Spacer(Modifier.height(10.dp))
-        Text(text = statusLabel, style = MaterialTheme.typography.labelLarge,
-            color = subTextColor, letterSpacing = 2.sp)
+
+        Spacer(Modifier.height(12.dp))
+
+        // Time-remaining badge
+        Surface(
+            color = arcColor.copy(alpha = 0.15f),
+            shape = MaterialTheme.shapes.extraLarge,
+            modifier = Modifier
+        ) {
+            Text(
+                text = when {
+                    h > 0 -> "${h}h ${m}m remaining"
+                    m > 0 -> "${m}m ${s}s remaining"
+                    else  -> "${s}s remaining"
+                },
+                style = MaterialTheme.typography.labelMedium,
+                color = arcColor,
+                fontWeight = FontWeight.SemiBold,
+                modifier = Modifier.padding(horizontal = 14.dp, vertical = 6.dp)
+            )
+        }
     }
 }
