@@ -56,6 +56,14 @@ class AppBlockerService : android.app.Service() {
         }
     }
 
+    private val immediatCheckReceiver = object : android.content.BroadcastReceiver() {
+        override fun onReceive(context: android.content.Context?, intent: android.content.Intent?) {
+            if (intent?.action == "dev.pranav.reef.CHECK_FOREGROUND_NOW") {
+                checkForegroundAndBlock()
+            }
+        }
+    }
+
     private val appPollRunnable = object : Runnable {
         override fun run() {
             try {
@@ -101,6 +109,15 @@ class AppBlockerService : android.app.Service() {
             addAction(Intent.ACTION_USER_PRESENT)
         }
         registerReceiver(screenReceiver, filter)
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
+            registerReceiver(immediatCheckReceiver,
+                android.content.IntentFilter("dev.pranav.reef.CHECK_FOREGROUND_NOW"),
+                RECEIVER_NOT_EXPORTED)
+        } else {
+            @Suppress("UnspecifiedRegisterReceiverFlag")
+            registerReceiver(immediatCheckReceiver,
+                android.content.IntentFilter("dev.pranav.reef.CHECK_FOREGROUND_NOW"))
+        }
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -253,6 +270,7 @@ class AppBlockerService : android.app.Service() {
         handler.removeCallbacks(routinePollRunnable)
         handler.removeCallbacksAndMessages(null)
         try { unregisterReceiver(screenReceiver) } catch (_: Exception) {}
+        try { unregisterReceiver(immediatCheckReceiver) } catch (_: Exception) {}
     }
 
     companion object {

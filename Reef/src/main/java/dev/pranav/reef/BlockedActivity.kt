@@ -299,6 +299,12 @@ private fun nonLinearArcFraction(rawFraction: Float): Float {
 }
 
 @Composable
+
+/** Linear arc with 1% initial visual offset so progress looks alive instantly at start. */
+private fun linearOffsetFraction(rawFraction: Float): Float =
+    (rawFraction * 0.99f + 0.01f).coerceIn(0f, 1f)
+
+@Composable
 fun FocusTimerDisplay(size: Dp = 240.dp) {
     val timerState by TimerStateManager.state.collectAsState()
     val context = LocalContext.current
@@ -315,145 +321,73 @@ fun FocusTimerDisplay(size: Dp = 240.dp) {
     val total = sessionTotal.longValue.coerceAtLeast(1L)
     val remaining = timerState.timeRemaining.coerceIn(0L, total)
     val rawFraction = remaining.toFloat() / total.toFloat()
-    val visualFraction = nonLinearArcFraction(rawFraction)
+    val visualFraction = linearOffsetFraction(rawFraction)
 
-    val sweepFraction by animateFloatAsState(
-        targetValue = visualFraction,
-        animationSpec = tween(950),
-        label = "timerSweep"
-    )
-
+    val sweepFraction by animateFloatAsState(visualFraction, tween(950), label = "sweep")
     val colorScheme = MaterialTheme.colorScheme
     val arcColor by animateColorAsState(
-        targetValue = when {
-            rawFraction > 0.5f  -> colorScheme.primary
-            rawFraction > 0.25f -> colorScheme.tertiary
-            else                -> colorScheme.error
-        },
-        animationSpec = tween(1500),
-        label = "arcUrgency"
+        when { rawFraction > 0.5f -> colorScheme.primary; rawFraction > 0.25f -> colorScheme.tertiary; else -> colorScheme.error },
+        tween(1500), label = "urgency"
     )
 
     val totalSeconds = (remaining / 1000L).coerceAtLeast(0L)
     val h = totalSeconds / 3600; val m = (totalSeconds % 3600) / 60; val s = totalSeconds % 60
-    val timeText = if (h > 0) String.format(Locale.ROOT, "%d:%02d:%02d", h, m, s)
-                  else String.format(Locale.ROOT, "%02d:%02d", m, s)
-
+    val timeText = if (h > 0) String.format(java.util.Locale.ROOT, "%d:%02d:%02d", h, m, s)
+                  else String.format(java.util.Locale.ROOT, "%02d:%02d", m, s)
+    val remainingLabel = when { h > 0 -> "${h}h ${m}m remaining"; m > 0 -> "${m}m ${s}s remaining"; else -> "${s}s remaining" }
     val isPaused = timerState.isPaused
 
-    Column(
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.Center
-    ) {
-        Box(contentAlignment = Alignment.Center, modifier = Modifier.size(size)) {
-            val density = LocalDensity.current
-            val strokePx = with(density) { (size * 0.065f).toPx() }
-            val radiusPx = with(density) { (size / 2).toPx() }
+    Box(contentAlignment = Alignment.Center, modifier = Modifier.size(size)) {
+        val density = LocalDensity.current
+        val strokePx = with(density) { 3.dp.toPx() }
 
-            Canvas(modifier = Modifier.fillMaxSize()) {
-                val inset = strokePx / 2f
-                val arcSize = Size(this.size.width - strokePx, this.size.height - strokePx)
-                val topLeft = Offset(inset, inset)
-                val center = Offset(this.size.width / 2f, this.size.height / 2f)
-
-                drawArc(
-                    color = colorScheme.surfaceVariant, startAngle = -90f, sweepAngle = 360f,
-                    useCenter = false, topLeft = topLeft, size = arcSize,
-                    style = Stroke(width = strokePx, cap = StrokeCap.Round)
-                )
-                if (sweepFraction > 0f) {
-                    drawArc(
-                        color = arcColor, startAngle = -90f,
-                        sweepAngle = sweepFraction * 360f,
-                        useCenter = false, topLeft = topLeft, size = arcSize,
-                        style = Stroke(width = strokePx, cap = StrokeCap.Round)
-                    )
-                }
-                // Clock ticks
-                val tickOuterR = radiusPx - strokePx - with(density) { 6.dp.toPx() }
-                for (i in 0 until 60) {
-                    val isMajor = i % 5 == 0
-                    val angle = Math.toRadians((i * 6 - 90).toDouble())
-                    val tickLen = with(density) { if (isMajor) 10.dp.toPx() else 5.dp.toPx() }
-                    val cos = kotlin.math.cos(angle).toFloat()
-                    val sin = kotlin.math.sin(angle).toFloat()
-                    drawLine(
-                        color = if (isMajor) colorScheme.outline else colorScheme.outlineVariant,
-                        start = Offset(center.x + cos * tickOuterR, center.y + sin * tickOuterR),
-                        end = Offset(center.x + cos * (tickOuterR - tickLen), center.y + sin * (tickOuterR - tickLen)),
-                        strokeWidth = with(density) { if (isMajor) 2.dp.toPx() else 1.dp.toPx() },
-                        cap = StrokeCap.Round
-                    )
-                }
+        Canvas(modifier = Modifier.fillMaxSize()) {
+            val inset = this.size.width * 0.06f
+            val arcSize = Size(this.size.width - inset * 2, this.size.height - inset * 2)
+            val topLeft = Offset(inset, inset)
+            // Glow layers
+            listOf(12.dp.toPx() to 0.07f, 7.dp.toPx() to 0.12f, 4.dp.toPx() to 0.18f).forEach { (w, a) ->
+                if (sweepFraction > 0f) drawArc(arcColor.copy(alpha = a), -90f, sweepFraction * 360f, false, topLeft, arcSize, style = Stroke(w, cap = StrokeCap.Round))
             }
-
-            // Centre: time + play/pause button
-            Column(
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                Text(
-                    text = timeText,
-                    fontSize = (size.value * 0.165f).sp,
-                    fontWeight = FontWeight.Bold,
-                    fontFamily = FontFamily.Monospace,
-                    color = colorScheme.onBackground,
-                    letterSpacing = 1.5.sp
-                )
-
-                // YouTube-style animated play/pause
-                val pauseScale by animateFloatAsState(
-                    targetValue = if (isPaused) 1.15f else 1f,
-                    animationSpec = spring(dampingRatio = 0.4f, stiffness = 400f),
-                    label = "pauseScale"
-                )
-                Box(
-                    contentAlignment = Alignment.Center,
-                    modifier = Modifier
-                        .size(40.dp)
-                        .scale(pauseScale)
-                        .clip(CircleShape)
-                        .background(colorScheme.primaryContainer.copy(alpha = 0.85f))
-                        .clickable {
-                            context.startService(
-                                Intent(context, FocusModeService::class.java).apply {
-                                    action = if (isPaused) FocusModeService.ACTION_RESUME
-                                             else FocusModeService.ACTION_PAUSE
-                                }
-                            )
-                        }
-                ) {
-                    Crossfade(targetState = isPaused, label = "playPauseIcon") { paused ->
-                        Icon(
-                            imageVector = if (paused) Icons.Rounded.PlayArrow else Icons.Rounded.Pause,
-                            contentDescription = if (paused) "Resume" else "Pause",
-                            tint = colorScheme.onPrimaryContainer,
-                            modifier = Modifier.size(22.dp)
-                        )
-                    }
-                }
-            }
+            // Track
+            drawArc(colorScheme.surfaceVariant, -90f, 360f, false, topLeft, arcSize, style = Stroke(strokePx, cap = StrokeCap.Round))
+            // Arc
+            if (sweepFraction > 0f) drawArc(arcColor, -90f, sweepFraction * 360f, false, topLeft, arcSize, style = Stroke(strokePx, cap = StrokeCap.Round))
         }
 
-        Spacer(Modifier.height(12.dp))
-
-        // Time-remaining badge
-        Surface(
-            color = arcColor.copy(alpha = 0.15f),
-            shape = MaterialTheme.shapes.extraLarge,
-            modifier = Modifier
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(6.dp),
+            modifier = Modifier.padding(horizontal = 24.dp)
         ) {
-            Text(
-                text = when {
-                    h > 0 -> "${h}h ${m}m remaining"
-                    m > 0 -> "${m}m ${s}s remaining"
-                    else  -> "${s}s remaining"
-                },
-                style = MaterialTheme.typography.labelMedium,
-                color = arcColor,
-                fontWeight = FontWeight.SemiBold,
-                modifier = Modifier.padding(horizontal = 14.dp, vertical = 6.dp)
-            )
+            // Badge inside ring — above timer
+            Surface(color = arcColor.copy(alpha = 0.13f), shape = MaterialTheme.shapes.extraLarge) {
+                Text(remainingLabel, style = MaterialTheme.typography.labelSmall, color = arcColor,
+                    fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp))
+            }
+            // Timer at centre
+            Text(timeText, fontSize = (size.value * 0.16f).sp, fontWeight = FontWeight.Bold,
+                fontFamily = FontFamily.Monospace, color = colorScheme.onBackground, letterSpacing = 1.5.sp)
+            // Pause button — slightly below centre
+            Spacer(Modifier.height(2.dp))
+            val btnScale by animateFloatAsState(if (isPaused) 1.15f else 1f,
+                spring(dampingRatio = 0.4f, stiffness = 400f), label = "btnScale")
+            Box(
+                contentAlignment = Alignment.Center,
+                modifier = Modifier.size(38.dp).scale(btnScale).clip(CircleShape)
+                    .background(colorScheme.primaryContainer.copy(alpha = 0.85f))
+                    .clickable {
+                        context.startService(Intent(context, FocusModeService::class.java).apply {
+                            action = if (isPaused) FocusModeService.ACTION_RESUME else FocusModeService.ACTION_PAUSE
+                        })
+                    }
+            ) {
+                Crossfade(isPaused, label = "icon") { paused ->
+                    Icon(if (paused) Icons.Rounded.PlayArrow else Icons.Rounded.Pause,
+                        contentDescription = null, tint = colorScheme.onPrimaryContainer,
+                        modifier = Modifier.size(20.dp))
+                }
+            }
         }
     }
 }

@@ -97,6 +97,16 @@ class FocusModeService : Service() {
     // call notificationManager.notify() ~once per minute during ticking, not every second.
     private var lastNotifiedMinute = -1L
 
+    private val handler = android.os.Handler(android.os.Looper.getMainLooper())
+
+    private fun checkForegroundAndApplyBlock() {
+        if (!prefs.getBoolean("block_home_screen", false)) return
+        if (!prefs.getBoolean("focus_mode", false)) return
+        // Delegate to AppBlockerService which has getForegroundApp logic
+        sendBroadcast(android.content.Intent("dev.pranav.reef.CHECK_FOREGROUND_NOW")
+            .setPackage(packageName))
+    }
+
     private val screenOnReceiver = object : android.content.BroadcastReceiver() {
         override fun onReceive(context: android.content.Context?, intent: android.content.Intent?) {
             if (intent?.action == android.content.Intent.ACTION_SCREEN_ON) {
@@ -597,6 +607,20 @@ class FocusModeService : Service() {
         prefs.edit {
             putInt("pomodoro_current_cycle", nextPhase.currentCycle)
             putBoolean("focus_mode", shouldAutoStart && nextPhase.phase == PomodoroPhase.FOCUS)
+        }
+
+        val goingToBreak = nextPhase.phase == PomodoroPhase.SHORT_BREAK ||
+                nextPhase.phase == PomodoroPhase.LONG_BREAK
+        val goingToFocus = nextPhase.phase == PomodoroPhase.FOCUS
+
+        // Break starts → forcefully dismiss any active overlay so user can freely use phone
+        if (goingToBreak && prefs.getBoolean("block_home_screen", false)) {
+            dismissHomeBlockOverlay()
+        }
+
+        // Focus resumes → immediately check what's on screen and apply block if needed
+        if (goingToFocus && prefs.getBoolean("block_home_screen", false)) {
+            handler.postDelayed({ checkForegroundAndApplyBlock() }, 300L)
         }
 
         initialDuration = nextPhase.duration
