@@ -31,6 +31,9 @@ class App : Application(), Configuration.Provider {
         Whitelist.init(this)
         FocusStats.init(this)
         FocusStats.initCheckpoint(this)
+        // If there's accumulated focus time from a force-stopped session (checkpoint exists)
+        // but activeSession is null (memory was cleared), flush the partial record now.
+        FocusStats.flushOrphanedSession()
         WebsiteBlocklist.init(this)
 
         // Start the UsageStats-based app blocker immediately

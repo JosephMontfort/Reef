@@ -16,6 +16,12 @@ private val provider = GoogleFont.Provider(
     certificates = R.array.com_google_android_gms_fonts_certs
 )
 
+/** JetBrains Mono — monospace font for the focus timer display */
+val JetBrainsMonoFamily: FontFamily = FontFamily(
+    Font(googleFont = GoogleFont("JetBrains Mono"), fontProvider = provider, weight = FontWeight.Bold),
+    Font(googleFont = GoogleFont("JetBrains Mono"), fontProvider = provider, weight = FontWeight.Normal),
+)
+
 /** DM Serif — expressive display / headline font used for hero text */
 val DMSerifFamily: FontFamily = FontFamily(
     Font(googleFont = GoogleFont("DM Serif Text"), fontProvider = provider)

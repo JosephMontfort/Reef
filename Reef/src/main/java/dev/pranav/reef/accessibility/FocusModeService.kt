@@ -604,23 +604,24 @@ class FocusModeService : Service() {
                 isRunning = shouldAutoStart, isPaused = !shouldAutoStart
             )
         }
-        prefs.edit {
+        prefs.edit().apply {
             putInt("pomodoro_current_cycle", nextPhase.currentCycle)
             putBoolean("focus_mode", shouldAutoStart && nextPhase.phase == PomodoroPhase.FOCUS)
+            commit() // synchronous — ensures focus_mode is readable before the broadcast fires
         }
 
         val goingToBreak = nextPhase.phase == PomodoroPhase.SHORT_BREAK ||
                 nextPhase.phase == PomodoroPhase.LONG_BREAK
         val goingToFocus = nextPhase.phase == PomodoroPhase.FOCUS
 
-        // Break starts → forcefully dismiss any active overlay so user can freely use phone
         if (goingToBreak && prefs.getBoolean("block_home_screen", false)) {
             dismissHomeBlockOverlay()
         }
 
-        // Focus resumes → immediately check what's on screen and apply block if needed
         if (goingToFocus && prefs.getBoolean("block_home_screen", false)) {
-            handler.postDelayed({ checkForegroundAndApplyBlock() }, 300L)
+            // Fire immediately (prefs already committed) and again after 1s as safety net
+            handler.post { checkForegroundAndApplyBlock() }
+            handler.postDelayed({ checkForegroundAndApplyBlock() }, 1_000L)
         }
 
         initialDuration = nextPhase.duration

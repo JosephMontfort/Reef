@@ -102,6 +102,32 @@ object FocusStats {
         runCatching { checkpointFile?.delete() }
     }
 
+    /** Called on App start: if checkpoint has data but activeSession is null (force-stop recovery),
+     *  save a partial session record so no minutes are lost. */
+    fun flushOrphanedSession() {
+        if (activeSession == null && accumulatedFocusMs > 1_000L) {
+            val now = System.currentTimeMillis()
+            val stub = FocusSession(
+                id = UUID.randomUUID().toString(),
+                startTimestamp = now - accumulatedFocusMs,
+                endTimestamp = now,
+                sessionType = SessionType.SIMPLE,
+                isCompleted = false,
+                phases = listOf(PhaseEntry(
+                    type = PhaseType.FOCUS,
+                    startTimestamp = now - accumulatedFocusMs,
+                    endTimestamp = now,
+                    actualDuration = accumulatedFocusMs,
+                    plannedDuration = accumulatedFocusMs,
+                    isCompleted = false
+                ))
+            )
+            _sessions.value = (listOf(stub) + _sessions.value).sortedByDescending { it.startTimestamp }
+            save()
+            clearCheckpoint()
+        }
+    }
+
     fun endSession(isCompleted: Boolean) {
         endPhase(isCompleted)
         val session = activeSession ?: run {
