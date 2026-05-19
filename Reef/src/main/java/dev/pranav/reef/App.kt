@@ -40,10 +40,16 @@ class App : Application(), Configuration.Provider {
         AppBlockerService.start(this)
 
         // Recover any focus session that was interrupted by a force-stop
-        SessionPersistence.restore(this)?.let {
-            startService(Intent(this, dev.pranav.reef.accessibility.FocusModeService::class.java).apply {
-                action = dev.pranav.reef.accessibility.FocusModeService.ACTION_RESUME_PERSISTED
-            })
+        // Bug2: use startForegroundService; Bug13: only if not already running
+        if (SessionPersistence.hasActiveSession(this) &&
+            !dev.pranav.reef.timer.TimerStateManager.state.value.isRunning) {
+            try {
+                startForegroundService(Intent(this, dev.pranav.reef.accessibility.FocusModeService::class.java).apply {
+                    action = dev.pranav.reef.accessibility.FocusModeService.ACTION_RESUME_PERSISTED
+                })
+            } catch (e: Exception) {
+                android.util.Log.e("App", "Session recovery failed", e)
+            }
         }
 
         scheduleWatcher(this)

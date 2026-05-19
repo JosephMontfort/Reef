@@ -200,7 +200,7 @@ class AppBlockerService : android.app.Service() {
 
         // ── Normal focus mode: block non-whitelisted apps ──
         val attempt = blockAttempts[pkg]
-        if (attempt != null && (now - attempt.time) < BLOCK_COOLDOWN_MS && attempt.retries == 0) return
+        if (attempt != null && (now - attempt.time) < BLOCK_COOLDOWN_MS) return
 
         if (focusMode) {
             if (!Whitelist.isWhitelisted(pkg)) {
@@ -222,7 +222,10 @@ class AppBlockerService : android.app.Service() {
         val existing = blockAttempts[pkg]
         val retries = existing?.retries ?: 0
 
-        if (retries > MAX_RETRIES) return
+        if (retries >= MAX_RETRIES) {
+            blockAttempts.remove(pkg)  // reset so next poll can try fresh
+            return
+        }
 
         Log.d(TAG, "Blocking $pkg reason=$reason retry=$retries")
         blockAttempts[pkg] = BlockAttempt(now, retries)
@@ -251,10 +254,7 @@ class AppBlockerService : android.app.Service() {
             val intent = Intent(this, BlockedActivity::class.java).apply {
                 putExtra(BlockedActivity.EXTRA_BLOCKED_PKG, pkg)
                 putExtra(BlockedActivity.EXTRA_BLOCK_REASON, reason.name)
-                flags = Intent.FLAG_ACTIVITY_NEW_TASK or
-                        Intent.FLAG_ACTIVITY_CLEAR_TOP or
-                        Intent.FLAG_ACTIVITY_SINGLE_TOP or
-                        Intent.FLAG_ACTIVITY_NO_ANIMATION
+                flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
             }
             startActivity(intent)
         } catch (e: Exception) {

@@ -53,12 +53,12 @@ class BlockerService : AccessibilityService() {
 
     private fun checkAndReviveSession() {
         if (!dev.pranav.reef.util.SessionPersistence.hasActiveSession(this)) return
-        val am = getSystemService(ACTIVITY_SERVICE) as android.app.ActivityManager
-        val alive = am.runningAppProcesses?.any {
-            it.processName == packageName &&
-            it.importance <= android.app.ActivityManager.RunningAppProcessInfo.IMPORTANCE_SERVICE
-        } ?: false
-        if (!alive) {
+        // Bug9/18: ActivityManager check always returns true because BlockerService is in the
+        // same process. Use TimerStateManager.isRunning as the in-process liveness flag instead.
+        val timerActive = dev.pranav.reef.timer.TimerStateManager.state.value.let {
+            it.isRunning || it.isPaused
+        }
+        if (!timerActive) {
             try {
                 startForegroundService(Intent(this, FocusModeService::class.java).apply {
                     action = FocusModeService.ACTION_RESUME_PERSISTED

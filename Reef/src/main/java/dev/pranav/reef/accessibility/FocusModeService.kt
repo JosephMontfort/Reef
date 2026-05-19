@@ -133,7 +133,6 @@ class FocusModeService : Service() {
                 prefs = ctx.getSharedPreferences("prefs", MODE_PRIVATE)
             }
         }
-        FocusStats.initCheckpoint(this)
         registerReceiver(screenOnReceiver, android.content.IntentFilter(android.content.Intent.ACTION_SCREEN_ON))
     }
 
@@ -194,7 +193,9 @@ class FocusModeService : Service() {
         }
         notificationManager.cancel(NOTIFICATION_ID)
         restoreDND()
-        prefs.edit { putBoolean("focus_mode", false) }
+        // Note: focus_mode written false ONLY in stopSession/endSession, not here,
+        // to avoid creating a blocking gap during force-stop revival.
+        // AppBlockerService will detect session end via SessionPersistence.
         dismissHomeBlockOverlay()
         TimerStateManager.reset()
         // NOTE: do NOT clear SessionPersistence here — force-stop calls onDestroy
@@ -217,6 +218,8 @@ class FocusModeService : Service() {
         prefs.edit { putBoolean("focus_mode", !isBreakPhase || !restored.state.isPomodoroMode) }
 
         // Restart stats tracking so time is recorded from the resume point
+        WhitelistAppCache.refresh(this)  // Bug8: warm cache for overlay grid
+        FocusStats.clearCheckpoint()  // Bug20: clear pre-kill checkpoint before new tracking
         FocusStats.startSession(
             if (restored.state.isPomodoroMode) SessionType.POMODORO else SessionType.SIMPLE
         )
@@ -244,12 +247,13 @@ class FocusModeService : Service() {
             Thread { WatchdogManager.start(this) }.start()
         }
         if (prefs.getBoolean("resilience_mode_enabled", false)) {
-            dev.pranav.reef.watchdog.WatchdogService.start(this)
+            ResilienceManager.start(this)
         }
     }
 
     /** Stored once when a phase starts so the chronometer anchor never drifts. */
     private var phaseEndEpoch: Long = 0L
+    private var lastCheckpointRemaining: Long = Long.MAX_VALUE
 
     private fun skipBreak() {
         val state = TimerStateManager.state.value
@@ -295,12 +299,14 @@ class FocusModeService : Service() {
                 cyclesBeforeLongBreak = prefs.getInt("pomodoro_cycles_before_long_break", 4)
             )
             TimerStateManager.setPomodoroConfig(config)
+            val pomodoroFirstDuration = config.focusDuration
+            initialDuration = pomodoroFirstDuration
             TimerStateManager.updateState {
                 copy(
                     isRunning = true, isPaused = false,
-                    timeRemaining = focusTimeMillis,
+                    timeRemaining = pomodoroFirstDuration,
                     pomodoroPhase = PomodoroPhase.FOCUS,
-                    currentCycle = prefs.getInt("pomodoro_current_cycle", 1),
+                    currentCycle = 1,   // Bug17: always reset to 1 for new session
                     totalCycles = config.cyclesBeforeLongBreak,
                     isPomodoroMode = true, isStrictMode = isStrictMode
                 )
@@ -316,14 +322,15 @@ class FocusModeService : Service() {
         }
 
         FocusStats.startSession(if (isPomodoroMode) SessionType.POMODORO else SessionType.SIMPLE)
-        FocusStats.startPhase(PhaseType.FOCUS, focusTimeMillis)
+        val actualStartDuration = if (isPomodoroMode) initialDuration else focusTimeMillis
+        FocusStats.startPhase(PhaseType.FOCUS, actualStartDuration)
         prefs.edit { putBoolean("focus_mode", true) }
         enableDNDIfNeeded()
 
         // Persist immediately + save session start epoch for grace-period keying
         SessionPersistence.saveRunning(
             this, TimerStateManager.state.value,
-            focusTimeMillis, focusTimeMillis,
+            actualStartDuration, actualStartDuration,
             TimerStateManager.getPomodoroConfig()
         )
         prefs.edit { putLong("session_start_epoch", System.currentTimeMillis()) }
@@ -336,7 +343,7 @@ class FocusModeService : Service() {
             Thread { WatchdogManager.start(this) }.start()
         }
         if (prefs.getBoolean("resilience_mode_enabled", false)) {
-            dev.pranav.reef.watchdog.WatchdogService.start(this)
+            ResilienceManager.start(this)
         }
 
         postNotification(
@@ -345,7 +352,7 @@ class FocusModeService : Service() {
             showPauseButton = !isStrictMode,
             timeLeft = focusTimeMillis
         )
-        startCountdown(focusTimeMillis)
+        startCountdown(actualStartDuration)
     }
 
     private fun pauseTimer() {
@@ -434,6 +441,7 @@ class FocusModeService : Service() {
         // eliminating drift between them completely.
         phaseEndEpoch = System.currentTimeMillis() + timeMillis
         lastNotifiedMinute = -1L
+        lastCheckpointRemaining = Long.MAX_VALUE
         SessionPersistence.saveRunning(this, TimerStateManager.state.value, timeMillis, initialDuration, TimerStateManager.getPomodoroConfig())
         tickHandler.post(tickRunnable)
     }
@@ -570,6 +578,7 @@ class FocusModeService : Service() {
         SessionPersistence.clear(this)
         Thread { WatchdogManager.stop(this) }.start()
         dev.pranav.reef.watchdog.WatchdogService.stop(this)
+        ResilienceManager.stop(this)
         showFocusCompleteNotification()
         stopSelf()
     }

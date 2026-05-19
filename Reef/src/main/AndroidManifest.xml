@@ -113,6 +113,8 @@
             android:noHistory="true"
             android:taskAffinity=""
             android:launchMode="singleTask"
+            android:screenOrientation="behind"
+            android:configChanges="orientation|screenSize|screenLayout|keyboardHidden"
             android:theme="@style/Theme.Reef" />
 
         <service
