@@ -60,6 +60,11 @@ class BootReceiver : BroadcastReceiver() {
 
         // Resume persisted session on reboot — compute remaining from phaseEndEpoch so elapsed reboot time is deducted
         if (dev.pranav.reef.util.SessionPersistence.hasActiveSession(context)) {
+            // Reschedule exact alarm for the remaining time so phase transitions still fire
+            val restored = dev.pranav.reef.util.SessionPersistence.restore(context)
+            if (restored != null && !restored.state.isPaused) {
+                dev.pranav.reef.util.PhaseAlarmManager.schedule(context, restored.remainingMs)
+            }
             context.startForegroundService(
                 Intent(context, FocusModeService::class.java).apply {
                     action = FocusModeService.ACTION_RESUME_PERSISTED

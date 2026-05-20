@@ -29,6 +29,7 @@ import dev.pranav.reef.timer.PomodoroPhase
 import dev.pranav.reef.timer.TimerSessionState
 import dev.pranav.reef.timer.TimerStateManager
 import dev.pranav.reef.util.*
+import dev.pranav.reef.util.PhaseAlarmManager
 import dev.pranav.reef.util.WhitelistAppCache
 import dev.pranav.reef.util.WatchdogManager
 import dev.pranav.reef.util.ResilienceManager
@@ -115,6 +116,7 @@ class FocusModeService : Service() {
                     // Reanchor phaseEndEpoch from current remaining and rebuild notification
                     // so the chronometer never shows stale/negative values after screen-on
                     phaseEndEpoch = System.currentTimeMillis() + state.timeRemaining
+                    phaseEndElapsed = SystemClock.elapsedRealtime() + state.timeRemaining
                     postNotification(
                         title = getNotificationTitle(),
                         isRunning = true,
@@ -168,6 +170,10 @@ class FocusModeService : Service() {
             ACTION_RESUME_PERSISTED -> resumePersistedSession()
             ACTION_SKIP_BREAK       -> skipBreak()
             ACTION_STOP             -> stopSession()
+            ACTION_PHASE_END_ALARM  -> {
+                dev.pranav.reef.receivers.SessionAlarmReceiver.releaseWakeLock()
+                handleTimerComplete()
+            }
         }
         return START_STICKY
     }
@@ -251,8 +257,10 @@ class FocusModeService : Service() {
         }
     }
 
-    /** Stored once when a phase starts so the chronometer anchor never drifts. */
+    /** Wall-clock epoch when current phase ends (System.currentTimeMillis base). */
     private var phaseEndEpoch: Long = 0L
+    /** ElapsedRealtime when current phase ends (SystemClock.elapsedRealtime base) — used for notification chronometer. */
+    private var phaseEndElapsed: Long = 0L
     private var lastCheckpointRemaining: Long = Long.MAX_VALUE
 
     private fun skipBreak() {
@@ -270,6 +278,7 @@ class FocusModeService : Service() {
         tickHandler.removeCallbacks(tickRunnable)
         countDownTimer?.cancel()
         SessionPersistence.clear(this)
+        PhaseAlarmManager.cancel(this)
         Thread { WatchdogManager.stop(this) }.start()
         dev.pranav.reef.watchdog.WatchdogService.stop(this)
         // User-cancelled — record partial stats but no congratulations notification
@@ -387,6 +396,7 @@ class FocusModeService : Service() {
     }
 
     private fun resumeTimer() {
+        // Reschedule exact alarm with remaining time
         val state = TimerStateManager.state.value
         TimerStateManager.updateState { copy(isRunning = true, isPaused = false) }
 
@@ -440,9 +450,14 @@ class FocusModeService : Service() {
         // notification chronometer setWhen() derive remaining from this same value,
         // eliminating drift between them completely.
         phaseEndEpoch = System.currentTimeMillis() + timeMillis
+        phaseEndElapsed = SystemClock.elapsedRealtime() + timeMillis
         lastNotifiedMinute = -1L
         lastCheckpointRemaining = Long.MAX_VALUE
         SessionPersistence.saveRunning(this, TimerStateManager.state.value, timeMillis, initialDuration, TimerStateManager.getPomodoroConfig())
+        // Schedule an exact alarm as a safety net so phase transitions fire on time
+        // even if Doze Mode prevents the tick loop from running. The tick loop and the
+        // alarm both call handleTimerComplete(); handleTimerComplete() is idempotent.
+        PhaseAlarmManager.schedule(this, timeMillis)
         tickHandler.post(tickRunnable)
     }
 
@@ -498,7 +513,9 @@ class FocusModeService : Service() {
                 setUsesChronometer(true)
                 setChronometerCountDown(true)
                 // Use the pre-anchored epoch so the chip never drifts across rebuilds
-                setWhen(if (phaseEndEpoch > 0) phaseEndEpoch else System.currentTimeMillis() + timeLeft)
+                // Use elapsedRealtime base — notification chronometer counts from elapsedRealtime,
+                // NOT currentTimeMillis. Mismatch caused the negative values on screen-off.
+                setWhen(if (phaseEndElapsed > 0) phaseEndElapsed else SystemClock.elapsedRealtime() + timeLeft)
 
                 val contentText = getString(R.string.time_remaining, minutesText)
                 setContentText(contentText)
@@ -569,6 +586,7 @@ class FocusModeService : Service() {
     }
 
     private fun endSession() {
+        PhaseAlarmManager.cancel(this)
         TimerStateManager.updateState { copy(isRunning = false, isPaused = false) }
         prefs.edit { putBoolean("focus_mode", false) }
         FocusStats.endSession(isCompleted = true)
@@ -635,7 +653,8 @@ class FocusModeService : Service() {
 
         initialDuration = nextPhase.duration
         lastNotifiedMinute = -1L
-        phaseEndEpoch = 0L  // will be set in startCountdown for the new phase
+        phaseEndEpoch = 0L
+        phaseEndElapsed = 0L
         FocusStats.startPhase(nextPhaseType, nextPhase.duration)
 
         if (nextPhase.phase == PomodoroPhase.FOCUS) {

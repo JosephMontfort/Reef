@@ -20,6 +20,7 @@ import androidx.compose.material.icons.filled.Replay
 import androidx.compose.material.icons.outlined.BarChart
 import androidx.compose.material.icons.outlined.Lock
 import androidx.compose.material.icons.rounded.*
+import android.provider.Settings
 import androidx.compose.material.icons.twotone.PlayArrow
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -480,8 +481,40 @@ fun SimpleFocusSetup(onStart: (TimerConfig) -> Unit) {
 
         Spacer(modifier = Modifier.height(32.dp))
 
+        // Check exact alarm permission on each session start attempt (API 31+)
+        var showAlarmPermDialog by remember { mutableStateOf(false) }
+        if (showAlarmPermDialog) {
+            AlertDialog(
+                onDismissRequest = { showAlarmPermDialog = false },
+                icon = { Icon(Icons.Rounded.Alarm, contentDescription = null) },
+                title = { Text(stringResource(R.string.exact_alarm_permission_name)) },
+                text = { Text(stringResource(R.string.exact_alarm_permission_description)) },
+                confirmButton = {
+                    TextButton(onClick = {
+                        showAlarmPermDialog = false
+                        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S) {
+                            context.startActivity(android.content.Intent(android.provider.Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM))
+                        }
+                    }) { Text("Grant Permission") }
+                },
+                dismissButton = {
+                    TextButton(onClick = {
+                        showAlarmPermDialog = false
+                        onStart(TimerConfig.Simple(minutes, isStrictMode))
+                    }) { Text("Start Anyway") }
+                }
+            )
+        }
+
         Button(
-            onClick = { onStart(TimerConfig.Simple(minutes, isStrictMode)) },
+            onClick = {
+                val hasAlarm = dev.pranav.reef.util.PhaseAlarmManager.canScheduleExact(context)
+                if (!hasAlarm && android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S) {
+                    showAlarmPermDialog = true
+                } else {
+                    onStart(TimerConfig.Simple(minutes, isStrictMode))
+                }
+            },
             modifier = Modifier.fillMaxWidth(),
             enabled = minutes > 0,
             shapes = ButtonDefaults.shapes(pressedShape = ButtonDefaults.pressedShape),

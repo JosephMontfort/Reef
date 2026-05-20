@@ -19,7 +19,8 @@
     <string name="battery_optimization_exception">Battery Optimization Exception</string>
     <string name="battery_optimization_exception_description">Please grant the battery optimization exceptions to continue.</string>
     <string name="exact_alarm_permission">Schedule Exact Alarms</string>
-    <string name="exact_alarm_permission_description">Allow Reef to schedule exact alarms for routines. This ensures your app blocking routines start and stop at the exact times you set.</string>
+    <string name="exact_alarm_permission_name">Precise Timing (Alarms &amp; Reminders)</string>
+    <string name="exact_alarm_permission_description">Required for razor-sharp focus session timing. Without this, your timer may drift or miss phase transitions (Focus → Break) when the screen is off due to system battery optimization.</string>
     <string name="do_not_disturb_permission">Do Not Disturb Permission</string>
     <string name="do_not_disturb_permission_description">Allow Reef to enable Do Not Disturb during focus sessions to minimize distractions. This can help you stay focused by silencing notifications while you work.</string>
 
