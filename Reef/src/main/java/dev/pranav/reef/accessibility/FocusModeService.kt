@@ -41,6 +41,7 @@ import java.util.concurrent.TimeUnit
 class FocusModeService : Service() {
 
     companion object {
+        const val ACTION_PHASE_END_ALARM = "dev.pranav.reef.PHASE_END_ALARM"
         private const val NOTIFICATION_ID = 1
         private const val BREAK_ALERT_NOTIFICATION_ID = 2
         private const val COMPLETE_NOTIFICATION_ID = 3
