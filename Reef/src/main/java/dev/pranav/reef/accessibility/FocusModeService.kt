@@ -41,7 +41,6 @@ import java.util.concurrent.TimeUnit
 class FocusModeService : Service() {
 
     companion object {
-        const val ACTION_PHASE_END_ALARM = "dev.pranav.reef.PHASE_END_ALARM"
         private const val NOTIFICATION_ID = 1
         private const val BREAK_ALERT_NOTIFICATION_ID = 2
         private const val COMPLETE_NOTIFICATION_ID = 3
@@ -53,6 +52,7 @@ class FocusModeService : Service() {
         const val ACTION_RESUME_PERSISTED = "dev.pranav.reef.RESUME_PERSISTED"
         const val ACTION_SKIP_BREAK = "dev.pranav.reef.SKIP_BREAK"
         const val ACTION_STOP = "dev.pranav.reef.STOP_SESSION"
+        const val ACTION_PHASE_END_ALARM = "dev.pranav.reef.PHASE_END_ALARM"
         const val EXTRA_TIME_LEFT = "extra_time_left"
         const val EXTRA_TIMER_STATE = "extra_timer_state"
     }
@@ -227,6 +227,7 @@ class FocusModeService : Service() {
         // Restart stats tracking so time is recorded from the resume point
         WhitelistAppCache.refresh(this)  // Bug8: warm cache for overlay grid
         FocusStats.clearCheckpoint()  // Bug20: clear pre-kill checkpoint before new tracking
+        notificationBuilder = null  // Ensure fresh rebuild with correct phase title
         FocusStats.startSession(
             if (restored.state.isPomodoroMode) SessionType.POMODORO else SessionType.SIMPLE
         )
@@ -656,6 +657,7 @@ class FocusModeService : Service() {
         lastNotifiedMinute = -1L
         phaseEndEpoch = 0L
         phaseEndElapsed = 0L
+        notificationBuilder = null  // Force full notification rebuild for new phase
         FocusStats.startPhase(nextPhaseType, nextPhase.duration)
 
         if (nextPhase.phase == PomodoroPhase.FOCUS) {
