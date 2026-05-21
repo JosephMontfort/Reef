@@ -266,7 +266,7 @@ class BlockerService : AccessibilityService() {
                 // Try IME_ENTER first (API 30+, most reliable) — simulates pressing Go/Enter
                 // on the keyboard without depending on the suggestion-dropdown structure.
                 val imeEnterPerformed = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.R) {
-                    finalBar?.performAction(AccessibilityNodeInfo.ACTION_IME_ENTER) ?: false
+                    finalBar?.performAction(AccessibilityNodeInfo.AccessibilityAction.ACTION_IME_ENTER.id) ?: false
                 } else false
                 if (!imeEnterPerformed) {
                     // Fall back to clicking the suggestion box (older API path)

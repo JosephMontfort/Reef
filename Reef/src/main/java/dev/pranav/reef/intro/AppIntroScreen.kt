@@ -28,6 +28,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.material3.Icon
 import androidx.compose.ui.Alignment
 import androidx.core.content.ContextCompat
@@ -107,7 +108,7 @@ fun AppIntroScreen() {
                     androidx.compose.material3.Icon(
                         imageVector = Icons.Rounded.AccessibilityNew,
                         contentDescription = null,
-                        modifier = androidx.compose.ui.Modifier.size(72.dp),
+                        modifier = Modifier.size(72.dp),
                         tint = Color.White
                     )
                     Spacer(modifier = androidx.compose.ui.Modifier.height(16.dp))
