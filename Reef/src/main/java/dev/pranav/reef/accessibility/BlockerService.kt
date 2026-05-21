@@ -143,18 +143,21 @@ class BlockerService : AccessibilityService() {
         handler.post(websiteLimitPollRunnable)
 
         // Accessibility services are auto-restarted by Android after force-stop.
-        // Use this to revive any interrupted focus session.
+        // Use TimerStateManager (in-process liveness) instead of runningAppProcesses
+        // (which always finds the current process — Bug18 fix).
         handler.postDelayed({
             if (dev.pranav.reef.util.SessionPersistence.hasActiveSession(this)) {
-                val running = (getSystemService(ACTIVITY_SERVICE) as android.app.ActivityManager)
-                    .runningAppProcesses?.any {
-                        it.processName == packageName &&
-                        it.importance <= android.app.ActivityManager.RunningAppProcessInfo.IMPORTANCE_SERVICE
-                    } ?: false
-                if (!running) {
-                    startForegroundService(Intent(this, FocusModeService::class.java).apply {
-                        action = FocusModeService.ACTION_RESUME_PERSISTED
-                    })
+                val timerActive = dev.pranav.reef.timer.TimerStateManager.state.value.let {
+                    it.isRunning || it.isPaused
+                }
+                if (!timerActive) {
+                    try {
+                        startForegroundService(Intent(this, FocusModeService::class.java).apply {
+                            action = FocusModeService.ACTION_RESUME_PERSISTED
+                        })
+                    } catch (e: Exception) {
+                        android.util.Log.e("BlockerService", "Revival failed", e)
+                    }
                 }
             }
         }, 3_000L)
@@ -187,12 +190,14 @@ class BlockerService : AccessibilityService() {
 
         // Only act on browser packages — app blocking is handled by AppBlockerService
         val config = browserConfigs[pkg] ?: return
-        val root = rootInActiveWindow ?: event.source ?: return
+        // Use rootInActiveWindow only — event.source is the node that changed (e.g., a content
+        // div on the page), not the window root. findAccessibilityNodeInfosByViewId on a
+        // content node never finds the URL bar, causing false "no URL → stop tracking" calls.
+        val root = rootInActiveWindow ?: return  // transient null during window transitions — skip
         val urlBarNode = findUrlBarNode(root, config.urlBarId) ?: return
-        val url = extractUrlFromNode(urlBarNode) ?: run {
-            WebsiteUsageTracker.stopTracking()
-            return
-        }
+        val url = extractUrlFromNode(urlBarNode) ?: return  // Don't stopTracking here —
+        // isFocused/editing state is transient; stopping tracking on every edit event
+        // breaks time-limit accounting. Tracking stops only on browser → other-app transition.
 
         Log.d(TAG, "Found url=$url")
         val domain = sanitizeUrl(url)
@@ -224,7 +229,10 @@ class BlockerService : AccessibilityService() {
     }
 
     private fun extractUrlFromNode(node: AccessibilityNodeInfo): String? {
-        if (node.isFocused) return null
+        // Skip only when the user is actively editing the URL bar (both focused AND editable).
+        // Checking isFocused alone was too aggressive — Chrome and Brave keep the URL bar
+        // "focused" even after navigation completes, preventing any URL from being extracted.
+        if (node.isFocused && node.isEditable && (node.text == null || !node.text.contains('.'))) return null
         val text = node.text?.toString() ?: return null
         if (text.isBlank() || !text.contains('.') || text.contains(' ')) return null
         return text
@@ -254,7 +262,16 @@ class BlockerService : AccessibilityService() {
             editText.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT, args)
             handler.postDelayed({
                 val finalRoot = rootInActiveWindow ?: return@postDelayed
-                performGoAction(finalRoot, config)
+                val finalBar = findUrlBarNode(finalRoot, config.urlBarId)
+                // Try IME_ENTER first (API 30+, most reliable) — simulates pressing Go/Enter
+                // on the keyboard without depending on the suggestion-dropdown structure.
+                val imeEnterPerformed = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.R) {
+                    finalBar?.performAction(AccessibilityNodeInfo.ACTION_IME_ENTER) ?: false
+                } else false
+                if (!imeEnterPerformed) {
+                    // Fall back to clicking the suggestion box (older API path)
+                    performGoAction(finalRoot, config)
+                }
             }, 300)
         }, 300)
     }

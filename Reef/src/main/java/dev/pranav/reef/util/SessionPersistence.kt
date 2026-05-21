@@ -77,6 +77,9 @@ object SessionPersistence {
             putInt(KEY_POMODORO_CYCLE, state.currentCycle)
             putInt(KEY_POMODORO_TOTAL, state.totalCycles)
             putLong(KEY_PHASE_DURATION, phaseDuration)
+            // Reset nuclear flag — WatchdogManager.start() sets it back to true if needed.
+            // Without this, a previous session's nuclear=true bleeds into the next session.
+            putBoolean(KEY_NUCLEAR_RUNNING, false)
             config?.let {
                 putLong(KEY_CFG_FOCUS, it.focusDuration)
                 putLong(KEY_CFG_SHORT, it.shortBreakDuration)

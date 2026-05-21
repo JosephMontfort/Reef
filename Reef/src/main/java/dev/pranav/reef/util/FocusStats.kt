@@ -161,8 +161,13 @@ object FocusStats {
         save()
     }
 
+    private val saveExecutor = java.util.concurrent.Executors.newSingleThreadExecutor()
+
     private fun save() {
-        runCatching { file.writeText(json.encodeToString(_sessions.value)) }
+        val snapshot = _sessions.value
+        saveExecutor.execute {
+            runCatching { file.writeText(json.encodeToString(snapshot)) }
+        }
     }
 
     fun sessionsForDay(dayOffset: Int = 0): List<FocusSession> {

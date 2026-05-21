@@ -124,13 +124,10 @@ object Whitelist {
             whitelist(defaultLauncherPackage)
         }
 
-        // Whitelist apps with SYSTEM_ALERT_WINDOW permission
-        context.packageManager.getPackagesHoldingPermissions(
-            arrayOf(android.Manifest.permission.SYSTEM_ALERT_WINDOW),
-            0
-        ).forEach { pkg ->
-            whitelist(pkg.packageName)
-        }
+        // NOTE: We intentionally do NOT whitelist by SYSTEM_ALERT_WINDOW permission.
+        // Social/entertainment apps (Facebook, Instagram, TikTok, etc.) commonly hold
+        // this permission and are exactly what users want to block. Auto-whitelisting
+        // by overlay permission silently defeats the core blocking feature.
     }
 
     fun isWhitelisted(packageName: String): Boolean {

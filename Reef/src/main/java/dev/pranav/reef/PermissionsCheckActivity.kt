@@ -149,12 +149,6 @@ fun PermissionsScreen(onBackClick: () -> Unit) {
                                 )
                                 context.startActivity(intent)
                             }
-
-                            PermissionType.EXACT_ALARM -> {
-                                if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S) {
-                                    context.startActivity(Intent(android.provider.Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM))
-                                }
-                            }
                         }
                     }
                 )

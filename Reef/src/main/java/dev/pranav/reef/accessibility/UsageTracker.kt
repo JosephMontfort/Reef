@@ -13,7 +13,8 @@ object UsageTracker {
     enum class BlockReason {
         NONE,
         DAILY_LIMIT,
-        ROUTINE_LIMIT
+        ROUTINE_LIMIT,
+        FOCUS_MODE
     }
 
     fun shouldBlock(context: Context, packageName: String): Boolean {

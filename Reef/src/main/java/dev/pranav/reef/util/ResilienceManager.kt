@@ -16,19 +16,20 @@ object ResilienceManager {
     private const val INTERVAL_MS = 60_000L
 
     // User's toggle preference — never changed by start()/stop() internally
-    private const val PREF_USER_ENABLED = "resilience_user_enabled"
+    private const val PREF_USER_ENABLED = "resilience_mode_enabled"
     // Runtime flag — true while an alarm is scheduled for this session
     private const val PREF_RUNNING = "resilience_running"
 
-    fun isUserEnabled(context: Context) =
-        context.getSharedPreferences("prefs", Context.MODE_PRIVATE)
-            .getBoolean(PREF_USER_ENABLED, false)
+    /** Device-protected prefs — readable before first unlock, consistent with global prefs. */
+    private fun sp(context: Context) = context.createDeviceProtectedStorageContext()
+        .getSharedPreferences("prefs", Context.MODE_PRIVATE)
+
+    fun isUserEnabled(context: Context) = sp(context).getBoolean(PREF_USER_ENABLED, false)
 
     fun setUserEnabled(context: Context, enabled: Boolean) {
-        context.getSharedPreferences("prefs", Context.MODE_PRIVATE)
-            .edit().putBoolean(PREF_USER_ENABLED, enabled).apply()
-        // Also sync global prefs used elsewhere
-        prefs.edit().putBoolean("resilience_mode_enabled", enabled).apply()
+        sp(context).edit().putBoolean(PREF_USER_ENABLED, enabled).apply()
+        // Keep runtime global prefs in sync if already initialised
+        if (isPrefsInitialized) prefs.edit().putBoolean(PREF_USER_ENABLED, enabled).apply()
     }
 
     /** Called when a focus session starts (if user has resilience enabled). */
@@ -41,7 +42,8 @@ object ResilienceManager {
                 am.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, triggerAt, pi)
             else
                 am.setExact(AlarmManager.RTC_WAKEUP, triggerAt, pi)
-            prefs.edit().putBoolean(PREF_RUNNING, true).apply()
+            sp(context).edit().putBoolean(PREF_RUNNING, true).apply()
+            if (isPrefsInitialized) prefs.edit().putBoolean(PREF_RUNNING, true).apply()
             Log.i(TAG, "Resilience alarm scheduled")
         } catch (e: Exception) {
             Log.e(TAG, "Failed to schedule alarm", e)
@@ -52,7 +54,8 @@ object ResilienceManager {
     fun stop(context: Context) {
         val am = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
         am.cancel(buildPendingIntent(context))
-        prefs.edit().putBoolean(PREF_RUNNING, false).apply()
+        sp(context).edit().putBoolean(PREF_RUNNING, false).apply()
+        if (isPrefsInitialized) prefs.edit().putBoolean(PREF_RUNNING, false).apply()
         Log.i(TAG, "Resilience alarm cancelled")
     }
 

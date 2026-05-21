@@ -5,6 +5,7 @@ import android.app.Application
 import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
+import android.os.Build
 import android.util.Log
 import androidx.compose.material3.ColorScheme
 import androidx.work.*
@@ -89,7 +90,13 @@ class App : Application(), Configuration.Provider {
                 appBlockerIntent,
                 PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
             )
-            alarmManager.set(AlarmManager.RTC_WAKEUP, currentTime + 1000, appBlockerPendingIntent)
+            // Use setExactAndAllowWhileIdle — crash recovery needs a guaranteed 1-second
+            // trigger. AlarmManager.set() is inexact on API 19+ and may fire 30+ min late.
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                alarmManager.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, currentTime + 1000, appBlockerPendingIntent)
+            } else {
+                alarmManager.setExact(AlarmManager.RTC_WAKEUP, currentTime + 1000, appBlockerPendingIntent)
+            }
 
             // Show DebugActivity with the error details
             val debugIntent = Intent(this, DebugActivity::class.java).apply {
@@ -102,7 +109,11 @@ class App : Application(), Configuration.Provider {
                 debugIntent,
                 PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
             )
-            alarmManager.set(AlarmManager.RTC_WAKEUP, currentTime + 1500, debugPendingIntent)
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                alarmManager.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, currentTime + 1500, debugPendingIntent)
+            } else {
+                alarmManager.setExact(AlarmManager.RTC_WAKEUP, currentTime + 1500, debugPendingIntent)
+            }
 
             defaultHandler?.uncaughtException(thread, throwable)
         }

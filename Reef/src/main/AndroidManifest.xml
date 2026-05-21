@@ -10,7 +10,9 @@
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
     <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
     <uses-permission android:name="android.permission.WAKE_LOCK" />
-    <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />
+    <uses-permission
+        android:name="android.permission.USE_EXACT_ALARM"
+        tools:ignore="ExactAlarmPolicy" />
 
     <uses-permission
         android:name="android.permission.QUERY_ALL_PACKAGES"
@@ -143,15 +145,6 @@
             android:name=".accessibility.RoutinesService"
             android:directBootAware="true"
             android:exported="false" />
-
-        <!-- Exact alarm receiver for precise phase-end transitions -->
-        <receiver
-            android:name=".receivers.SessionAlarmReceiver"
-            android:exported="false">
-            <intent-filter>
-                <action android:name="dev.pranav.reef.PHASE_END" />
-            </intent-filter>
-        </receiver>
 
         <receiver
             android:name=".receivers.BootReceiver"

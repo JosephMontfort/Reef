@@ -100,8 +100,7 @@ enum class PermissionType {
     NOTIFICATION,
     BATTERY_OPTIMIZATION,
     DND,
-    OVERLAY,
-    EXACT_ALARM
+    OVERLAY
 }
 
 data class PermissionStatus(
@@ -173,19 +172,6 @@ fun Context.checkAllPermissions(): List<PermissionStatus> {
             isOptional = true
         )
     )
-
-    if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S) {
-        val am = getSystemService(android.app.AlarmManager::class.java)
-        permissions.add(
-            PermissionStatus(
-                type = PermissionType.EXACT_ALARM,
-                isGranted = am?.canScheduleExactAlarms() ?: false,
-                title = getString(R.string.exact_alarm_permission_name),
-                description = getString(R.string.exact_alarm_permission_description),
-                isOptional = false
-            )
-        )
-    }
 
     return permissions
 }

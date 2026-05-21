@@ -58,9 +58,12 @@ class AppBlockerService : android.app.Service() {
 
     private val immediatCheckReceiver = object : android.content.BroadcastReceiver() {
         override fun onReceive(context: android.content.Context?, intent: android.content.Intent?) {
-            if (intent?.action == "dev.pranav.reef.CHECK_FOREGROUND_NOW") {
-                checkForegroundAndBlock()
-            }
+            if (intent?.action != "dev.pranav.reef.CHECK_FOREGROUND_NOW") return
+            // Re-verify focus_mode here — the sender checked it before broadcasting but
+            // prefs can change between send and receive (async delivery race condition).
+            if (!prefs.getBoolean("focus_mode", false)) return
+            if (!prefs.getBoolean("block_home_screen", false)) return
+            checkForegroundAndBlock()
         }
     }
 
@@ -147,8 +150,10 @@ class AppBlockerService : android.app.Service() {
             .setSmallIcon(R.drawable.ic_launcher_foreground)
             .setContentTitle(getString(R.string.app_name))
             .setContentText(getString(R.string.blocker_service_running))
-            .setPriority(if (focusActive) NotificationCompat.PRIORITY_MIN else NotificationCompat.PRIORITY_MIN)
-            .setVisibility(if (focusActive) NotificationCompat.VISIBILITY_SECRET else NotificationCompat.VISIBILITY_SECRET)
+            // Hidden during active focus (FocusModeService notification takes precedence).
+            // Slightly visible during idle monitoring so users know the service is alive.
+            .setPriority(if (focusActive) NotificationCompat.PRIORITY_MIN else NotificationCompat.PRIORITY_LOW)
+            .setVisibility(if (focusActive) NotificationCompat.VISIBILITY_SECRET else NotificationCompat.VISIBILITY_PRIVATE)
             .setOngoing(true)
             .setSilent(true)
             .build()
@@ -199,13 +204,19 @@ class AppBlockerService : android.app.Service() {
         }
 
         // ── Normal focus mode: block non-whitelisted apps ──
+        // Clear stale block attempts when focus mode is off — prevents the map from growing
+        // indefinitely and avoids stale retries from a previous session firing after it ends.
+        if (!focusMode && blockAttempts.isNotEmpty()) {
+            blockAttempts.clear()
+        }
+
         val attempt = blockAttempts[pkg]
         if (attempt != null && (now - attempt.time) < BLOCK_COOLDOWN_MS) return
 
         if (focusMode) {
             if (!Whitelist.isWhitelisted(pkg)) {
                 FocusStats.recordBlockEvent(pkg, "focus_mode")
-                triggerBlock(pkg, UsageTracker.BlockReason.ROUTINE_LIMIT, now)
+                triggerBlock(pkg, UsageTracker.BlockReason.FOCUS_MODE, now)
                 return
             }
         }
@@ -254,7 +265,11 @@ class AppBlockerService : android.app.Service() {
             val intent = Intent(this, BlockedActivity::class.java).apply {
                 putExtra(BlockedActivity.EXTRA_BLOCKED_PKG, pkg)
                 putExtra(BlockedActivity.EXTRA_BLOCK_REASON, reason.name)
-                flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
+                // CLEAR_TOP + SINGLE_TOP: if BlockedActivity is already on top, deliver
+                // onNewIntent() instead of creating a new instance and stacking it.
+                flags = Intent.FLAG_ACTIVITY_NEW_TASK or
+                        Intent.FLAG_ACTIVITY_CLEAR_TOP or
+                        Intent.FLAG_ACTIVITY_SINGLE_TOP
             }
             startActivity(intent)
         } catch (e: Exception) {

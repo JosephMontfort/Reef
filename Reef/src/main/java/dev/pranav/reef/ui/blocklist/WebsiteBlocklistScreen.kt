@@ -1,5 +1,8 @@
 package dev.pranav.reef.ui.blocklist
 
+import android.content.Intent
+import android.provider.Settings
+import androidx.activity.ComponentActivity
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -8,7 +11,10 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Warning
+import androidx.compose.ui.platform.LocalContext
+import dev.pranav.reef.util.isAccessibilityServiceEnabledForBlocker
+import dev.pranav.reef.util.showAccessibilityDialog
 import androidx.compose.material.icons.outlined.Public
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -71,6 +77,10 @@ fun WebsiteBlocklistScreen(onBackPressed: () -> Unit) {
             )
         }
     ) { paddingValues ->
+        val context = LocalContext.current
+        val activity = context as? ComponentActivity
+        val accessibilityGranted = remember { mutableStateOf(context.isAccessibilityServiceEnabledForBlocker()) }
+
         LazyColumn(
             modifier = Modifier.fillMaxSize(),
             contentPadding = PaddingValues(
@@ -81,6 +91,49 @@ fun WebsiteBlocklistScreen(onBackPressed: () -> Unit) {
             ),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
+            item {
+                // Show accessibility permission banner ONLY on this screen — the feature
+                // requires it. This avoids blocking the intro and nagging non-website users.
+                if (!accessibilityGranted.value) {
+                    Card(
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer)
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(16.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(12.dp)
+                        ) {
+                            Icon(
+                                Icons.Default.Warning,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.onErrorContainer
+                            )
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    stringResource(R.string.accessibility_service),
+                                    style = MaterialTheme.typography.titleSmall,
+                                    color = MaterialTheme.colorScheme.onErrorContainer
+                                )
+                                Text(
+                                    stringResource(R.string.accessibility_service_description),
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onErrorContainer
+                                )
+                            }
+                            TextButton(onClick = {
+                                activity?.showAccessibilityDialog()
+                                accessibilityGranted.value = context.isAccessibilityServiceEnabledForBlocker()
+                            }) {
+                                Text(
+                                    stringResource(R.string.grant_optional),
+                                    color = MaterialTheme.colorScheme.onErrorContainer
+                                )
+                            }
+                        }
+                    }
+                }
+            }
             item {
                 BlocklistInfoCard()
             }
