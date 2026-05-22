@@ -827,7 +827,13 @@ class FocusModeService : Service() {
         )
         val triggerTimeMs = System.currentTimeMillis() + timeMillis
         val alarmClockInfo = AlarmManager.AlarmClockInfo(triggerTimeMs, null)
-        alarmManager.setAlarmClock(alarmClockInfo, pendingIntent)
+        try {
+            alarmManager.setAlarmClock(alarmClockInfo, pendingIntent)
+        } catch (e: SecurityException) {
+            // Fallback: If Android 14+ denies exact alarm permission,
+            // swallow the crash. The tickHandler loop acts as the fallback.
+            e.printStackTrace()
+        }
     }
 
     private fun cancelCompletionAlarm() {
