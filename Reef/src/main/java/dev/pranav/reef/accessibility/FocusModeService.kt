@@ -817,10 +817,9 @@ class FocusModeService : Service() {
             e.printStackTrace()
         }
     }
-}
 
     private fun scheduleCompletionAlarm(timeMillis: Long) {
-        val alarmManager = getSystemService(Context.ALARM_SERVICE) as AlarmManager
+        val alarmManager = getSystemService(android.content.Context.ALARM_SERVICE) as AlarmManager
         val intent = Intent(this, FocusModeService::class.java).apply { action = ACTION_PHASE_COMPLETE }
         val pendingIntent = PendingIntent.getService(
             this, 99, intent,
@@ -832,7 +831,7 @@ class FocusModeService : Service() {
     }
 
     private fun cancelCompletionAlarm() {
-        val alarmManager = getSystemService(Context.ALARM_SERVICE) as AlarmManager
+        val alarmManager = getSystemService(android.content.Context.ALARM_SERVICE) as AlarmManager
         val intent = Intent(this, FocusModeService::class.java).apply { action = ACTION_PHASE_COMPLETE }
         val pendingIntent = PendingIntent.getService(
             this, 99, intent,
