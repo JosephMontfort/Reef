@@ -605,27 +605,27 @@ class FocusModeService : Service() {
             PomodoroPhase.LONG_BREAK  -> PhaseType.LONG_BREAK
             else                      -> PhaseType.FOCUS
         }
-        val shouldAutoStart = when (nextPhase.phase) {
-            PomodoroPhase.FOCUS -> prefs.getBoolean("auto_start_pomodoro", true)
-            else                -> prefs.getBoolean("auto_start_breaks", false)
-        }
+        // Breaks and the next focus cycle always start automatically.
+        // The only thing that can be paused is an active focus phase (if not in strict mode).
+        // "auto_start_breaks" and "auto_start_pomodoro" toggles have been removed.
+
+        val goingToBreak = nextPhase.phase == PomodoroPhase.SHORT_BREAK ||
+                nextPhase.phase == PomodoroPhase.LONG_BREAK
+        val goingToFocus = nextPhase.phase == PomodoroPhase.FOCUS
 
         TimerStateManager.updateState {
             copy(
                 pomodoroPhase = nextPhase.phase, currentCycle = nextPhase.currentCycle,
                 timeRemaining = nextPhase.duration,
-                isRunning = shouldAutoStart, isPaused = !shouldAutoStart
+                isRunning = true, isPaused = false
             )
         }
         prefs.edit().apply {
             putInt("pomodoro_current_cycle", nextPhase.currentCycle)
-            putBoolean("focus_mode", shouldAutoStart && nextPhase.phase == PomodoroPhase.FOCUS)
-            commit() // synchronous — ensures focus_mode is readable before the broadcast fires
+            // focus_mode=true only during focus phases (not breaks)
+            putBoolean("focus_mode", goingToFocus)
+            commit() // synchronous — ensures focus_mode is readable before broadcast fires
         }
-
-        val goingToBreak = nextPhase.phase == PomodoroPhase.SHORT_BREAK ||
-                nextPhase.phase == PomodoroPhase.LONG_BREAK
-        val goingToFocus = nextPhase.phase == PomodoroPhase.FOCUS
 
         if (goingToBreak && prefs.getBoolean("block_home_screen", false)) {
             dismissHomeBlockOverlay()
@@ -642,8 +642,8 @@ class FocusModeService : Service() {
         phaseEndEpoch = 0L  // will be set in startCountdown for the new phase
         FocusStats.startPhase(nextPhaseType, nextPhase.duration)
 
-        if (nextPhase.phase == PomodoroPhase.FOCUS) {
-            if (shouldAutoStart) enableDNDIfNeeded()
+        if (goingToFocus) {
+            enableDNDIfNeeded()
             if (prefs.getBoolean("break_alerts", true)) showBreakEndedNotification()
         } else {
             restoreDND()
@@ -654,12 +654,12 @@ class FocusModeService : Service() {
 
         postNotification(
             title = getNotificationTitle(),
-            isRunning = shouldAutoStart,
-            showPauseButton = shouldAutoStart && !state.isStrictMode,
+            isRunning = true,
+            showPauseButton = goingToFocus && !state.isStrictMode,
             timeLeft = nextPhase.duration
         )
         broadcastTimerUpdate(formatTime(nextPhase.duration))
-        if (shouldAutoStart) startCountdown(nextPhase.duration)
+        startCountdown(nextPhase.duration)
     }
 
     // ─── Phase calculation ───────────────────────────────────────────────────────

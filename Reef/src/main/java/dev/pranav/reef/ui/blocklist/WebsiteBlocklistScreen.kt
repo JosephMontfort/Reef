@@ -44,6 +44,11 @@ fun WebsiteBlocklistScreen(onBackPressed: () -> Unit) {
     var editingHours by remember { mutableStateOf(0) }
     var editingMinutes by remember { mutableStateOf(30) }
 
+    val context = LocalContext.current
+    val activity = context as? ComponentActivity
+    // Re-checked on each recomposition so the banner disappears after granting
+    val accessibilityGranted = remember { mutableStateOf(context.isAccessibilityServiceEnabledForBlocker()) }
+
     val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
 
     Scaffold(
@@ -65,22 +70,22 @@ fun WebsiteBlocklistScreen(onBackPressed: () -> Unit) {
             )
         },
         floatingActionButton = {
-            ExtendedFloatingActionButton(
-                onClick = {
-                    editingDomain = null
-                    editingIsLimit = false
-                    editingHours = 0
-                    editingMinutes = 30
-                    showAddDialog = true
-                },
-                icon = { Icon(Icons.Default.Add, contentDescription = null) },
-                text = { Text(stringResource(R.string.add_website)) }
-            )
+            // Only show the FAB when accessibility is granted — the feature is non-functional otherwise
+            if (accessibilityGranted.value) {
+                ExtendedFloatingActionButton(
+                    onClick = {
+                        editingDomain = null
+                        editingIsLimit = false
+                        editingHours = 0
+                        editingMinutes = 30
+                        showAddDialog = true
+                    },
+                    icon = { Icon(Icons.Default.Add, contentDescription = null) },
+                    text = { Text(stringResource(R.string.add_website)) }
+                )
+            }
         }
     ) { paddingValues ->
-        val context = LocalContext.current
-        val activity = context as? ComponentActivity
-        val accessibilityGranted = remember { mutableStateOf(context.isAccessibilityServiceEnabledForBlocker()) }
 
         LazyColumn(
             modifier = Modifier.fillMaxSize(),
@@ -93,8 +98,13 @@ fun WebsiteBlocklistScreen(onBackPressed: () -> Unit) {
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
             item {
-                // Show accessibility permission banner ONLY on this screen — the feature
-                // requires it. This avoids blocking the intro and nagging non-website users.
+                // Accessibility is REQUIRED for website blocking — without it the
+                // BlockerService cannot read the URL bar in browsers, so no blocking occurs.
+                // The FAB is hidden when not granted; this banner explains why and how to fix it.
+                if (!accessibilityGranted.value) {
+                    // Re-check each time the screen recomposes (e.g., returning from settings)
+                    accessibilityGranted.value = context.isAccessibilityServiceEnabledForBlocker()
+                }
                 if (!accessibilityGranted.value) {
                     Card(
                         modifier = Modifier.fillMaxWidth(),
@@ -117,17 +127,19 @@ fun WebsiteBlocklistScreen(onBackPressed: () -> Unit) {
                                     color = MaterialTheme.colorScheme.onErrorContainer
                                 )
                                 Text(
-                                    stringResource(R.string.accessibility_service_description),
+                                    "Required to block websites in browsers. " +
+                                            "Grant it to enable the Add button.",
                                     style = MaterialTheme.typography.bodySmall,
                                     color = MaterialTheme.colorScheme.onErrorContainer
                                 )
                             }
                             TextButton(onClick = {
                                 activity?.showAccessibilityDialog()
-                                accessibilityGranted.value = context.isAccessibilityServiceEnabledForBlocker()
+                                accessibilityGranted.value =
+                                    context.isAccessibilityServiceEnabledForBlocker()
                             }) {
                                 Text(
-                                    stringResource(R.string.grant_optional),
+                                    "Grant",
                                     color = MaterialTheme.colorScheme.onErrorContainer
                                 )
                             }

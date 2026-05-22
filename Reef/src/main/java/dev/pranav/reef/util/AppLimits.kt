@@ -2,7 +2,6 @@ package dev.pranav.reef.util
 
 import android.content.Context
 import android.content.SharedPreferences
-import android.os.Process
 import androidx.core.content.edit
 import java.time.LocalDate
 import java.time.ZoneId
@@ -70,65 +69,176 @@ object Whitelist {
         sharedPreferences = context.getSharedPreferences("whitelist", Context.MODE_PRIVATE)
 
         if (sharedPreferences.all.isEmpty()) {
-            whitelistAll(allowedApps)
-
-            // Whitelist all system apps by default
-            context.packageManager.getInstalledPackages(Process.myUserHandle().hashCode())
-                .forEach { pkgInfo ->
-                    if ((pkgInfo.applicationInfo!!.flags and android.content.pm.ApplicationInfo.FLAG_SYSTEM) != 0) {
-                        whitelist(pkgInfo.packageName)
-                    }
-                }
+            // Auto-whitelist only genuinely productive/study apps that are installed.
+            // We do NOT bulk-whitelist by FLAG_SYSTEM — that whitelists social/entertainment
+            // apps that users want to block. Only functional system roles (keyboard, phone,
+            // SMS, launcher) and a curated productivity list are whitelisted.
+            val pm = context.packageManager
+            productiveApps.forEach { pkg ->
+                if (isPackageInstalled(pm, pkg)) whitelist(pkg)
+            }
         }
 
-        // Whitelist all installed input methods (keyboards)
+        // Always whitelist functional system roles (required for the phone to work normally)
+
+        // Keyboards — blocking a keyboard makes the device unusable
         val inputMethodManager =
             context.getSystemService(Context.INPUT_METHOD_SERVICE) as android.view.inputmethod.InputMethodManager
-        val inputMethods = inputMethodManager.enabledInputMethodList
-        inputMethods.forEach { imi ->
-            whitelist(imi.packageName)
-        }
+        inputMethodManager.enabledInputMethodList.forEach { whitelist(it.packageName) }
 
-        // Whitelist the default SMS app
-        val defaultSmsPackage = android.provider.Telephony.Sms.getDefaultSmsPackage(context)
-        if (defaultSmsPackage != null) {
-            whitelist(defaultSmsPackage)
-        }
+        // Default SMS app
+        android.provider.Telephony.Sms.getDefaultSmsPackage(context)?.let { whitelist(it) }
 
-        // Whitelist the default Phone app
-        val telecomManager =
-            context.getSystemService(Context.TELECOM_SERVICE) as android.telecom.TelecomManager
-        val defaultPhonePackage = telecomManager.defaultDialerPackage
-        if (defaultPhonePackage != null) {
-            whitelist(defaultPhonePackage)
-        }
+        // Default Phone/Dialer app
+        (context.getSystemService(Context.TELECOM_SERVICE) as android.telecom.TelecomManager)
+            .defaultDialerPackage?.let { whitelist(it) }
 
-        // Whitelist the default assistant app
-        val intentAssist = android.content.Intent(android.content.Intent.ACTION_ASSIST).apply {
-            addCategory(android.content.Intent.CATEGORY_DEFAULT)
-        }
-        val resolveInfoAssist = context.packageManager.resolveActivity(intentAssist, 0)
-        val defaultAssistPackage = resolveInfoAssist?.activityInfo?.packageName
-        if (defaultAssistPackage != null) {
-            whitelist(defaultAssistPackage)
-        }
+        // Default assistant
+        context.packageManager.resolveActivity(
+            android.content.Intent(android.content.Intent.ACTION_ASSIST).apply {
+                addCategory(android.content.Intent.CATEGORY_DEFAULT)
+            }, 0
+        )?.activityInfo?.packageName?.let { whitelist(it) }
 
-        // Whitelist the default launcher
-        val intent = android.content.Intent(android.content.Intent.ACTION_MAIN).apply {
-            addCategory(android.content.Intent.CATEGORY_HOME)
-            addCategory(android.content.Intent.CATEGORY_DEFAULT)
-        }
-        val resolveInfo = context.packageManager.resolveActivity(intent, 0)
-        val defaultLauncherPackage = resolveInfo?.activityInfo?.packageName
-        if (defaultLauncherPackage != null) {
-            whitelist(defaultLauncherPackage)
-        }
+        // Default launcher — must be whitelisted so the home button always works
+        context.packageManager.resolveActivity(
+            android.content.Intent(android.content.Intent.ACTION_MAIN).apply {
+                addCategory(android.content.Intent.CATEGORY_HOME)
+                addCategory(android.content.Intent.CATEGORY_DEFAULT)
+            }, 0
+        )?.activityInfo?.packageName?.let { whitelist(it) }
 
         // NOTE: We intentionally do NOT whitelist by SYSTEM_ALERT_WINDOW permission.
-        // Social/entertainment apps (Facebook, Instagram, TikTok, etc.) commonly hold
-        // this permission and are exactly what users want to block. Auto-whitelisting
-        // by overlay permission silently defeats the core blocking feature.
+        // Social/entertainment apps commonly hold this and are exactly what users block.
     }
+
+    private fun isPackageInstalled(pm: android.content.pm.PackageManager, pkg: String): Boolean =
+        try { pm.getPackageInfo(pkg, 0); true } catch (_: Exception) { false }
+
+    /**
+     * Curated list of productive and study apps to whitelist on fresh install.
+     * Only apps that are actually installed will be whitelisted.
+     * Update this list as new popular study/productivity apps emerge.
+     */
+    val productiveApps = hashSetOf(
+        // ── Reef itself ─────────────────────────────────────────────────────
+        "dev.pranav.reef",
+
+        // ── AI assistants (used for studying / work) ─────────────────────
+        "com.openai.chatgpt",                // ChatGPT
+        "com.google.android.apps.bard",      // Google Bard (old package)
+        "com.google.android.apps.gemini",    // Google Gemini
+        "com.anthropic.claude",              // Claude
+        "com.microsoft.copilot",             // Microsoft Copilot
+        "com.perplexity.app",                // Perplexity AI
+
+        // ── Google productivity suite ─────────────────────────────────────
+        "com.google.android.apps.docs",
+        "com.google.android.apps.docs.editor.docs",
+        "com.google.android.apps.docs.editor.sheets",
+        "com.google.android.apps.sheets",
+        "com.google.android.apps.slides",
+        "com.google.android.apps.drive",
+        "com.google.android.keep",           // Google Keep
+        "com.google.android.apps.tasks",
+        "com.google.android.apps.paidtasks",
+        "com.google.android.calendar",
+        "com.google.android.deskclock",      // Clock / Alarms
+        "com.google.android.apps.classroom", // Google Classroom
+        "com.google.android.apps.meet",      // Google Meet
+        "com.google.android.gm",             // Gmail
+        "com.google.android.apps.tachyon",   // Google Duo / Meet legacy
+
+        // ── Photos & media pickers (needed by ChatGPT, Gemini etc.) ──────
+        "com.google.android.apps.photos",
+        "com.google.android.apps.photosgo",
+        "com.miui.gallery",                  // Xiaomi Gallery
+        "com.sec.android.gallery3d",         // Samsung Gallery
+        "com.coloros.gallery3d",             // OPPO/Realme Gallery
+        "com.bbk.album",                     // Vivo Album
+        "com.huawei.photos",                 // Huawei Gallery
+        "com.android.gallery3d",             // AOSP Gallery
+        // Media picker provider packages that appear when apps request images/videos
+        "com.google.android.providers.media.module",
+        "com.android.providers.media",
+        "com.android.providers.media.module",
+
+        // ── Microsoft Office / Teams ──────────────────────────────────────
+        "com.microsoft.office.word",
+        "com.microsoft.office.excel",
+        "com.microsoft.office.powerpoint",
+        "com.microsoft.office.onenote",
+        "com.microsoft.todos",
+        "com.microsoft.teams",
+        "com.microsoft.launcher.enterprise",
+
+        // ── Education / E-learning ────────────────────────────────────────
+        "org.khanacademy.android",           // Khan Academy
+        "com.duolingo",                      // Duolingo
+        "com.coursera.android",              // Coursera
+        "com.edx.mobile",                    // edX
+        "com.udemy.android",                 // Udemy
+        "com.byju.learning",                 // BYJU'S
+        "in.bhanzu.android",                 // Bhanzu
+        "com.vedantu",                        // Vedantu
+        "com.unacademy",                     // Unacademy
+        "com.meritnation",                   // Merit Nation
+        "com.toppr",                          // Toppr
+        "com.doubtnut.app",                  // Doubtnut
+        "io.codelearn.codelearnapp",         // CodeLearn
+        "com.sololearn",                     // SoloLearn
+        "com.mimo.android",                  // Mimo (coding)
+        "com.grasshopper.android",           // Grasshopper (Google coding)
+        "com.quizlet.quizletandroid",        // Quizlet
+        "com.ankidroid.anki",                // AnkiDroid flashcards
+        "com.memrise.android.memrisecompanion", // Memrise
+
+        // ── Note-taking / writing ─────────────────────────────────────────
+        "md.obsidian",                       // Obsidian
+        "com.notion.id",                     // Notion
+        "com.evernote",                      // Evernote
+        "com.microsoft.office.onenote",
+        "net.cozic.joplin",                  // Joplin
+        "org.standardnotes",                 // Standard Notes
+        "com.simplenote.android",            // Simplenote
+
+        // ── Focus / study tools ───────────────────────────────────────────
+        "com.forestapp.Forest",              // Forest (study timer)
+        "com.tiknil.focusflow",              // Focus Flow
+        "com.flora.focus",                   // Flora
+        "com.brilliantapp",                  // Brilliant
+
+        // ── Communication (work) ──────────────────────────────────────────
+        "com.slack",
+
+        // ── Calculators ──────────────────────────────────────────────────
+        "com.sadellie.calculator",
+        "com.google.android.calculator",
+        "com.sec.android.app.popupcalculator", // Samsung calc
+
+        // ── Authentication ────────────────────────────────────────────────
+        "com.google.android.apps.authenticator2",
+        "me.jmh.authenticatorpro",
+        "com.authy.authy",
+
+        // ── Maps / navigation (practical utility) ─────────────────────────
+        "com.google.android.apps.maps",
+        "net.osmand",
+
+        // ── Camera apps (system) — appear in launcher but are system apps ─
+        "com.google.android.GoogleCamera",
+        "com.android.camera2",
+        "com.sec.android.app.camera",        // Samsung camera
+        "com.miui.camera",                   // MIUI camera
+        "com.coloros.camera",                // OPPO camera
+        "com.vivo.camera",                   // Vivo camera
+        "com.huawei.camera",                 // Huawei camera
+        "com.lineageos.aperture",
+        "com.lineageos.aperture.dev",
+
+        // ── MicroG / alternative frameworks ──────────────────────────────
+        "app.revanced.android.gms",
+    )
 
     fun isWhitelisted(packageName: String): Boolean {
         // Reef itself is always allowed — regardless of user prefs
@@ -158,48 +268,4 @@ object Whitelist {
         }
     }
 
-    val allowedApps = hashSetOf(
-        "dev.pranav.reef",
-        "dev.pranav.applock",
-
-        "com.google.android.deskclock",
-        "com.google.android.calendar",
-        "com.google.android.keep",
-        "com.google.android.contacts",
-
-        "com.google.android.apps.docs",
-        "com.google.android.apps.drive",
-        "com.google.android.apps.sheets",
-        "com.google.android.apps.slides",
-        "com.google.android.apps.maps",
-        "com.google.android.apps.photos",
-        "com.google.android.apps.photosgo",
-        "com.google.android.apps.authenticator2",
-        "com.google.android.apps.paidtasks",
-        "com.google.android.apps.docs.editor.docs",
-        "com.google.android.apps.docs.editor.sheets",
-        "com.google.android.apps.classroom",
-        "com.google.android.apps.giant",
-        "com.google.android.apps.tachyon",
-
-        "app.revanced.android.gms", // MicroG / ReVanced GMS
-        "net.osmand",
-        "com.fsck.k9",
-        "bin.mt.plus.canary",
-        "com.sadellie.calculator",
-        "com.lineageos.aperture.dev",
-        "com.lineageos.aperture",
-        "com.shazam.android",
-        "com.synapsetech.compass",
-        "me.jmh.authenticatorpro",
-        "md.obsidian",
-
-        "com.slack",
-        "com.google.android.gm",
-        "com.google.android.apps.meet",
-        "com.microsoft.teams",
-        "com.paypal.android.p2pmobile",
-        "com.google.android.apps.nbu.paisa.user",
-        "com.fampay.in",
-    )
 }

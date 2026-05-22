@@ -1,9 +1,11 @@
 package dev.pranav.reef.ui.whitelist
 
-import android.content.pm.ApplicationInfo
 import android.content.pm.LauncherApps
 import android.content.pm.PackageManager
-import android.os.Build
+import android.graphics.Bitmap
+import android.graphics.Canvas
+import android.graphics.drawable.BitmapDrawable
+import android.graphics.drawable.Drawable
 import androidx.compose.runtime.State
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.graphics.asImageBitmap
@@ -22,11 +24,9 @@ class WhitelistViewModel(
 
     private val _uiState = mutableStateOf<AllowedAppsState>(AllowedAppsState.Loading)
     private val _searchQuery = mutableStateOf("")
-    private val _hideSystemApps = mutableStateOf(true)
 
     val uiState: State<AllowedAppsState> = _uiState
     val searchQuery: State<String> = _searchQuery
-    val hideSystemApps: State<Boolean> = _hideSystemApps
 
     private var allApps = listOf<WhitelistedApp>()
 
@@ -39,36 +39,32 @@ class WhitelistViewModel(
                 val allAppsList = mutableListOf<WhitelistedApp>()
 
                 profiles.forEach { userHandle ->
-                    val launcherActivities = launcherApps.getActivityList(null, userHandle)
+                    // Use LauncherApps.getActivityList() — this returns exactly the apps
+                    // that have a launcher icon the user can tap on the home screen.
+                    // Camera, Calculator, system browsers etc. appear here even though
+                    // they are system apps. No secondary FLAG_SYSTEM list needed.
+                    val launcherActivities = launcherApps
+                        .getActivityList(null, userHandle)
                         .distinctBy { it.applicationInfo.packageName }
+                        .filter { it.applicationInfo.packageName != currentPackageName }
 
-                    val profileSystemApps =
-                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.VANILLA_ICE_CREAM) {
-                            launcherApps.getPreInstalledSystemPackages(userHandle)
-                                .mapNotNull { pkg ->
-                                    runCatching { packageManager.getApplicationInfo(pkg, 0) }.getOrNull()
-                                }
-                        } else emptyList()
-
-                    val combined = (launcherActivities.map { it.applicationInfo } + profileSystemApps)
-                        .distinctBy { it.packageName }
-                        .filter { it.packageName != currentPackageName }
-                        .map { appInfo ->
-                            val badgedIcon = packageManager.getUserBadgedIcon(
-                                appInfo.loadIcon(packageManager), userHandle
-                            )
-                            val isSystem = (appInfo.flags and ApplicationInfo.FLAG_SYSTEM) != 0
-
+                    launcherActivities.forEach { info ->
+                        val badgedIcon = packageManager.getUserBadgedIcon(
+                            info.applicationInfo.loadIcon(packageManager), userHandle
+                        )
+                        allAppsList.add(
                             WhitelistedApp(
-                                packageName = appInfo.packageName,
-                                label = appInfo.loadLabel(packageManager).toString(),
-                                icon = badgedIcon.toBitmap().asImageBitmap(),
-                                isWhitelisted = Whitelist.isWhitelisted(appInfo.packageName),
-                                user = userHandle,
-                                isSystemApp = isSystem
+                                packageName = info.applicationInfo.packageName,
+                                label = info.applicationInfo
+                                    .loadLabel(packageManager).toString(),
+                                icon = drawableToBitmap(badgedIcon).asImageBitmap(),
+                                isWhitelisted = Whitelist.isWhitelisted(
+                                    info.applicationInfo.packageName
+                                ),
+                                user = userHandle
                             )
-                        }
-                    allAppsList.addAll(combined)
+                        )
+                    }
                 }
                 allAppsList.sortedBy { it.label }
             }
@@ -82,27 +78,14 @@ class WhitelistViewModel(
         updateFilteredList()
     }
 
-    fun toggleHideSystemApps() {
-        _hideSystemApps.value = !_hideSystemApps.value
-        updateFilteredList()
-    }
-
     private fun updateFilteredList() {
-        // Keep the Loading spinner visible if app list hasn't loaded yet,
-        // even if the user has already typed in the search field.
         if (allApps.isEmpty() && _uiState.value is AllowedAppsState.Loading) return
-
         val query = _searchQuery.value
-        val hide = _hideSystemApps.value
-        val filtered = allApps
-            .filter { app -> !hide || !app.isSystemApp }
-            .let { list ->
-                if (query.isEmpty()) list
-                else list.filter {
-                    it.label.contains(query, ignoreCase = true) ||
-                            it.packageName.contains(query, ignoreCase = true)
-                }
-            }
+        val filtered = if (query.isEmpty()) allApps
+        else allApps.filter {
+            it.label.contains(query, ignoreCase = true) ||
+                    it.packageName.contains(query, ignoreCase = true)
+        }
         _uiState.value = AllowedAppsState.Success(filtered)
     }
 
@@ -115,4 +98,19 @@ class WhitelistViewModel(
         }
         updateFilteredList()
     }
+
+    companion object {
+        /** Safe Drawable → Bitmap conversion that doesn't require core-ktx. */
+        fun drawableToBitmap(drawable: Drawable): Bitmap {
+            if (drawable is BitmapDrawable && drawable.bitmap != null) return drawable.bitmap
+            val w = drawable.intrinsicWidth.takeIf { it > 0 } ?: 48
+            val h = drawable.intrinsicHeight.takeIf { it > 0 } ?: 48
+            val bitmap = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888)
+            val canvas = Canvas(bitmap)
+            drawable.setBounds(0, 0, canvas.width, canvas.height)
+            drawable.draw(canvas)
+            return bitmap
+        }
+    }
 }
+

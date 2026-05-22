@@ -18,19 +18,35 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.*
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.Text
 import androidx.compose.ui.Alignment
+import dev.pranav.reef.util.doesNotNeedAutostartGrant
+import dev.pranav.reef.util.hasOverlayPermission
+import dev.pranav.reef.util.requestAutostartPermission
+import dev.pranav.reef.util.requestOverlayPermission
 import androidx.core.content.ContextCompat
 import androidx.core.content.edit
 import androidx.core.net.toUri
@@ -99,53 +115,133 @@ fun AppIntroScreen() {
             contentColor = Color.White,
             onNext = { true },
             customContent = {
-                androidx.compose.foundation.layout.Column(
-                    modifier = androidx.compose.ui.Modifier
+                Column(
+                    modifier = Modifier
                         .fillMaxWidth()
                         .padding(horizontal = 24.dp),
-                    horizontalAlignment = androidx.compose.ui.Alignment.CenterHorizontally
+                    horizontalAlignment = Alignment.CenterHorizontally
                 ) {
-                    androidx.compose.material3.Icon(
+                    Icon(
                         imageVector = Icons.Rounded.AccessibilityNew,
                         contentDescription = null,
                         modifier = Modifier.size(72.dp),
                         tint = Color.White
                     )
-                    Spacer(modifier = androidx.compose.ui.Modifier.height(16.dp))
-                    androidx.compose.material3.Text(
+                    Spacer(modifier = Modifier.height(16.dp))
+                    Text(
                         text = stringResource(R.string.accessibility_service),
-                        style = androidx.compose.material3.MaterialTheme.typography.headlineMedium,
+                        style = MaterialTheme.typography.headlineMedium,
                         color = Color.White
                     )
-                    Spacer(modifier = androidx.compose.ui.Modifier.height(8.dp))
-                    androidx.compose.material3.Text(
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(
                         text = stringResource(R.string.accessibility_service_website_only_description),
-                        style = androidx.compose.material3.MaterialTheme.typography.bodyMedium,
+                        style = MaterialTheme.typography.bodyMedium,
                         color = Color.White.copy(alpha = 0.85f),
-                        textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                        textAlign = TextAlign.Center
                     )
-                    Spacer(modifier = androidx.compose.ui.Modifier.height(20.dp))
+                    Spacer(modifier = Modifier.height(20.dp))
                     val accessGranted = context.isAccessibilityServiceEnabledForBlocker()
                     if (!accessGranted) {
-                        androidx.compose.material3.OutlinedButton(
+                        OutlinedButton(
                             onClick = { activity?.showAccessibilityDialog() },
-                            border = androidx.compose.foundation.BorderStroke(1.dp, Color.White),
-                            colors = androidx.compose.material3.ButtonDefaults.outlinedButtonColors(contentColor = Color.White)
+                            border = BorderStroke(1.dp, Color.White),
+                            colors = ButtonDefaults.outlinedButtonColors(contentColor = Color.White)
                         ) {
-                            androidx.compose.material3.Text(stringResource(R.string.grant_optional))
+                            Text(stringResource(R.string.grant_optional))
                         }
                     } else {
-                        androidx.compose.material3.Text(
+                        Text(
                             text = "✓ ${stringResource(R.string.accessibility_service)} granted",
                             color = Color.White,
-                            style = androidx.compose.material3.MaterialTheme.typography.bodyMedium
+                            style = MaterialTheme.typography.bodyMedium
                         )
                     }
                 }
             }
         ),
 
-        // 3. Usage Statistics
+        // 3. Display Over Other Apps — MANDATORY (required for home-block overlay)
+        IntroPage(
+            title = stringResource(R.string.overlay_permission),
+            description = "",
+            backgroundColor = Color(0xFFE65100),
+            contentColor = Color.White,
+            onNext = {
+                if (!activity!!.hasOverlayPermission()) {
+                    activity.requestOverlayPermission()
+                    false
+                } else true
+            },
+            customContent = {
+                var granted by remember { mutableStateOf(activity?.hasOverlayPermission() == true) }
+                Column(
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    Icon(Icons.Rounded.Layers, null, Modifier.size(72.dp), tint = Color.White)
+                    Spacer(Modifier.height(16.dp))
+                    Text(stringResource(R.string.overlay_permission),
+                        style = MaterialTheme.typography.headlineMedium, color = Color.White)
+                    Spacer(Modifier.height(8.dp))
+                    Text(stringResource(R.string.overlay_permission_description),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = Color.White.copy(alpha = 0.85f), textAlign = TextAlign.Center)
+                    Spacer(Modifier.height(20.dp))
+                    if (granted) {
+                        Text("✓ Permission granted", color = Color.White,
+                            style = MaterialTheme.typography.bodyMedium)
+                    } else {
+                        OutlinedButton(
+                            onClick = {
+                                activity?.requestOverlayPermission()
+                                granted = activity?.hasOverlayPermission() == true
+                            },
+                            border = BorderStroke(1.dp, Color.White),
+                            colors = ButtonDefaults.outlinedButtonColors(contentColor = Color.White)
+                        ) { Text("Grant Permission") }
+                    }
+                }
+            }
+        ),
+
+        // 4. Autostart — MANDATORY on Chinese OEMs, auto-passes on stock Android
+        if (!doesNotNeedAutostartGrant()) {
+            IntroPage(
+                title = stringResource(R.string.autostart_permission),
+                description = "",
+                backgroundColor = Color(0xFF1B5E20),
+                contentColor = Color.White,
+                onNext = {
+                    // On Chinese OEMs there is no API to verify autostart state, so we
+                    // trust the user tapped the button and accepted. Allow proceeding.
+                    true
+                },
+                customContent = {
+                    Column(
+                        modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        Icon(Icons.Rounded.RestartAlt, null, Modifier.size(72.dp), tint = Color.White)
+                        Spacer(Modifier.height(16.dp))
+                        Text(stringResource(R.string.autostart_permission),
+                            style = MaterialTheme.typography.headlineMedium, color = Color.White)
+                        Spacer(Modifier.height(8.dp))
+                        Text(stringResource(R.string.autostart_permission_description),
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = Color.White.copy(alpha = 0.85f), textAlign = TextAlign.Center)
+                        Spacer(Modifier.height(20.dp))
+                        OutlinedButton(
+                            onClick = { activity?.requestAutostartPermission() },
+                            border = BorderStroke(1.dp, Color.White),
+                            colors = ButtonDefaults.outlinedButtonColors(contentColor = Color.White)
+                        ) { Text("Open Autostart Settings") }
+                    }
+                }
+            )
+        } else null,
+
+        // 5. Usage Statistics
         IntroPage(
             title = stringResource(R.string.app_usage_statistics),
             description = stringResource(R.string.app_usage_statistics_description),
@@ -163,7 +259,7 @@ fun AppIntroScreen() {
             }
         ),
 
-        // 4. Notification Permission (Android 13+)
+        // 6. Notification Permission (Android 13+)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             IntroPage(
                 title = stringResource(R.string.notification_permission),
@@ -184,7 +280,7 @@ fun AppIntroScreen() {
             )
         } else null,
 
-        // 5. Battery Optimization
+        // 7. Battery Optimization
         IntroPage(
             title = stringResource(R.string.battery_optimization_exception),
             description = stringResource(R.string.battery_optimization_exception_description),
@@ -208,7 +304,7 @@ fun AppIntroScreen() {
             }
         ),
 
-        // 6. Do Not Disturb Permission (Android 13+)
+        // 8. Do Not Disturb Permission (Android 13+)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU && !context.hasDndPermission()) {
             IntroPage(
                 title = stringResource(R.string.do_not_disturb_permission),

@@ -331,6 +331,13 @@
     <string name="blocked_by_routine">%1$s is blocked by your active routine</string>
     <string name="blocked_by_focus_mode">%1$s is blocked during your focus session</string>
     <string name="reached_limit">%1$s has reached its limit</string>
+    <string name="overlay_permission">Display Over Other Apps</string>
+    <string name="overlay_permission_description">Allows Reef to show a blocking screen over other apps during focus sessions. Required for app blocking to work reliably.</string>
+    <string name="autostart_permission">Autostart Permission</string>
+    <string name="autostart_permission_description">Allows Reef to start automatically on boot so your focus sessions resume and app blocking continues even after a restart.</string>
+    <string name="grant_optional">Grant (Optional)</string>
+    <string name="accessibility_service_website_only_description">Optional — only required for website blocking in browsers. App blocking works without it. You can grant it later from the Website Blocklist screen.</string>
+    <string name="pomodoro_notifications_section">Pomodoro Notifications</string>
     <string name="distraction_blocked">Distraction Blocked</string>
     <string name="you_were_using">You were using %1$s</string>
 
@@ -409,8 +416,6 @@
     <string name="block_home_screen">Block Home Screen</string>
     <string name="block_home_screen_desc">Overlay persists on home screen during focus</string>
     <string name="home_block_subtitle">Focus session active. Only allowed apps are accessible.</string>
-    <string name="overlay_permission">Display Over Other Apps</string>
-    <string name="overlay_permission_description">Required for the persistent home-screen block overlay during focus sessions. Without this, pressing Home can dismiss the overlay.</string>
     <string name="allowed_apps_label">ALLOWED APPS</string>
 
     <!-- BlockedActivity -->
@@ -418,9 +423,6 @@
 
     <!-- Permissions screen -->
     <string name="optional">Optional</string>
-    <string name="grant_optional">Grant (Optional)</string>
-    <string name="accessibility_service_website_only_description">Only needed for website / browser blocking. App blocking now works without this permission. On Xiaomi devices you can skip this if you don\'t use website limits.</string>
-
 
     <string name="hide_system_apps">Hide system apps</string>
 

@@ -5,7 +5,6 @@ import androidx.compose.ui.graphics.vector.ImageVector
 
 sealed class SettingsScreenRoute {
     data object Main: SettingsScreenRoute()
-    data object Pomodoro: SettingsScreenRoute()
     data object Notifications: SettingsScreenRoute()
 }
 

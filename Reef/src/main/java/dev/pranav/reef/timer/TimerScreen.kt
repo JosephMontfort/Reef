@@ -538,7 +538,11 @@ fun PomodoroFocusSetup(onStart: (TimerConfig) -> Unit) {
                     modifier = Modifier.weight(1f),
                     label = stringResource(R.string.focus_label),
                     value = focusMinutes,
-                    onValueChange = { focusMinutes = it },
+                    onValueChange = {
+                        focusMinutes = it
+                        // Persist immediately — changes from this screen are now durable
+                        prefs.edit().putInt("pomodoro_focus_minutes", it).apply()
+                    },
                     range = 1..120,
                     suffix = stringResource(R.string.min_short_suffix)
                 )
@@ -546,7 +550,10 @@ fun PomodoroFocusSetup(onStart: (TimerConfig) -> Unit) {
                     modifier = Modifier.weight(1f),
                     label = stringResource(R.string.short_break_label),
                     value = shortBreakMinutes,
-                    onValueChange = { shortBreakMinutes = it },
+                    onValueChange = {
+                        shortBreakMinutes = it
+                        prefs.edit().putInt("pomodoro_short_break_minutes", it).apply()
+                    },
                     range = 1..30,
                     suffix = stringResource(R.string.min_short_suffix)
                 )
@@ -562,7 +569,10 @@ fun PomodoroFocusSetup(onStart: (TimerConfig) -> Unit) {
                     modifier = Modifier.weight(1f),
                     label = stringResource(R.string.long_break_label),
                     value = longBreakMinutes,
-                    onValueChange = { longBreakMinutes = it },
+                    onValueChange = {
+                        longBreakMinutes = it
+                        prefs.edit().putInt("pomodoro_long_break_minutes", it).apply()
+                    },
                     range = 1..60,
                     suffix = stringResource(R.string.min_short_suffix)
                 )
@@ -570,7 +580,10 @@ fun PomodoroFocusSetup(onStart: (TimerConfig) -> Unit) {
                     modifier = Modifier.weight(1f),
                     label = stringResource(R.string.cycles_label),
                     value = cycles,
-                    onValueChange = { cycles = it },
+                    onValueChange = {
+                        cycles = it
+                        prefs.edit().putInt("pomodoro_cycles", it).apply()
+                    },
                     range = 1..10,
                     suffix = ""
                 )

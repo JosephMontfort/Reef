@@ -60,8 +60,6 @@ fun WhitelistScreen(
     searchQuery: String,
     onSearchQueryChange: (String) -> Unit,
     onToggle: (WhitelistedApp) -> Unit,
-    hideSystemApps: Boolean = true,
-    onToggleHideSystemApps: () -> Unit = {},
 ) {
     val scrollBehavior =
         TopAppBarDefaults.exitUntilCollapsedScrollBehavior(rememberTopAppBarState())
@@ -127,23 +125,7 @@ fun WhitelistScreen(
                     )
                 )
 
-                // ── Filter chip row ────────────────────────────────────────────
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 16.dp)
-                        .padding(bottom = 4.dp),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    FilterChip(
-                        selected = hideSystemApps,
-                        onClick = onToggleHideSystemApps,
-                        label = { Text(stringResource(R.string.hide_system_apps)) },
-                        leadingIcon = if (hideSystemApps) {
-                            { Icon(Icons.Rounded.Check, contentDescription = null, modifier = Modifier.size(16.dp)) }
-                        } else null
-                    )
-                }
+                // (Filter chip removed — list shows all launcher-openable apps by design)
             }
         }
     ) { paddingValues ->

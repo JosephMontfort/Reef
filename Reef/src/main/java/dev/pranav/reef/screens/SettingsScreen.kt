@@ -65,11 +65,7 @@ fun SettingsContent(
             when (screen) {
                 SettingsScreenRoute.Main -> MainSettingsContent(
                     contentPadding = paddingValues,
-                    onNavigate = { currentScreen = it }
-                )
-
-                SettingsScreenRoute.Pomodoro -> PomodoroSettingsContent(
-                    onBackPressed = { currentScreen = SettingsScreenRoute.Main },
+                    onNavigate = { currentScreen = it },
                     onSoundPicker = onSoundPicker
                 )
 
