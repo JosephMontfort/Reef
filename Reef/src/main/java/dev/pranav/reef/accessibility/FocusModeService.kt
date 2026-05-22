@@ -824,10 +824,17 @@ class FocusModeService : Service() {
     private fun scheduleCompletionAlarm(timeMillis: Long) {
         val alarmManager = getSystemService(android.content.Context.ALARM_SERVICE) as AlarmManager
         val intent = Intent(this, FocusModeService::class.java).apply { action = ACTION_PHASE_COMPLETE }
-        val pendingIntent = PendingIntent.getService(
-            this, 99, intent,
-            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-        )
+        val pendingIntent = if (android.os.Build.VERSION.SDK_INT >= 26) {
+            PendingIntent.getForegroundService(
+                this, 99, intent,
+                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+            )
+        } else {
+            PendingIntent.getService(
+                this, 99, intent,
+                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+            )
+        }
         val triggerTimeMs = System.currentTimeMillis() + timeMillis
         val alarmClockInfo = AlarmManager.AlarmClockInfo(triggerTimeMs, null)
         try {
@@ -842,10 +849,17 @@ class FocusModeService : Service() {
     private fun cancelCompletionAlarm() {
         val alarmManager = getSystemService(android.content.Context.ALARM_SERVICE) as AlarmManager
         val intent = Intent(this, FocusModeService::class.java).apply { action = ACTION_PHASE_COMPLETE }
-        val pendingIntent = PendingIntent.getService(
-            this, 99, intent,
-            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-        )
+        val pendingIntent = if (android.os.Build.VERSION.SDK_INT >= 26) {
+            PendingIntent.getForegroundService(
+                this, 99, intent,
+                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+            )
+        } else {
+            PendingIntent.getService(
+                this, 99, intent,
+                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+            )
+        }
         alarmManager.cancel(pendingIntent)
     }
 }
