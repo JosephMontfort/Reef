@@ -396,7 +396,10 @@ class FocusModeService : Service() {
 
         tickHandler.removeCallbacksAndMessages(null)
         cancelCompletionAlarm()
-        TimerStateManager.updateState { copy(isRunning = false, isPaused = true) }
+        
+        // Calculate true remaining time to prevent sub-second pause drift
+        val exactRemaining = (expectedCompletionElapsed - android.os.SystemClock.elapsedRealtime()).coerceAtLeast(0L)
+        TimerStateManager.updateState { copy(isRunning = false, isPaused = true, timeRemaining = exactRemaining) }
 
         // ── Blocks stay active during pause ──────────────────────────────────
         // Do NOT set focus_mode=false, do NOT dismiss overlay, do NOT restore DND.
