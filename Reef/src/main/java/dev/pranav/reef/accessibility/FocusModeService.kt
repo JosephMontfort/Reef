@@ -12,6 +12,8 @@ import android.content.pm.ServiceInfo
 import android.media.AudioAttributes
 import android.os.Build
 import android.os.IBinder
+import android.app.AlarmManager
+import android.os.SystemClock
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import androidx.core.app.ServiceCompat
@@ -50,9 +52,11 @@ class FocusModeService : Service() {
         const val ACTION_STOP = "dev.pranav.reef.STOP_SESSION"
         const val EXTRA_TIME_LEFT = "extra_time_left"
         const val EXTRA_TIMER_STATE = "extra_timer_state"
+        const val ACTION_PHASE_COMPLETE = "dev.pranav.reef.PHASE_COMPLETE"
     }
 
     private val notificationManager by lazy { NotificationManagerCompat.from(this) }
+    private var expectedCompletionElapsed: Long = 0L
     private val systemNotificationManager by lazy { getSystemService(NOTIFICATION_SERVICE) as NotificationManager }
     private val tickHandler = android.os.Handler(android.os.Looper.getMainLooper())
     private val tickRunnable = object : Runnable {
@@ -89,7 +93,14 @@ class FocusModeService : Service() {
             if (remaining > 0L) {
                 tickHandler.postDelayed(this, 500L)
             } else {
-                handleTimerComplete()
+                val nowElapsed = SystemClock.elapsedRealtime()
+                if (nowElapsed >= expectedCompletionElapsed - 1000) {
+                    cancelCompletionAlarm()
+                    handleTimerComplete()
+                } else {
+                    val trueRemaining = expectedCompletionElapsed - nowElapsed
+                    startCountdown(trueRemaining)
+                }
             }
         }
     }
@@ -162,7 +173,7 @@ class FocusModeService : Service() {
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         if (intent?.action == null) return START_NOT_STICKY
-        if (intent.action != ACTION_PAUSE) promoteToForeground()
+        if (intent.action != ACTION_PAUSE && intent.action != ACTION_PHASE_COMPLETE) promoteToForeground()
 
         when (intent.action) {
             ACTION_PAUSE            -> pauseTimer()
@@ -172,8 +183,19 @@ class FocusModeService : Service() {
             ACTION_RESUME_PERSISTED -> resumePersistedSession()
             ACTION_SKIP_BREAK       -> skipBreak()
             ACTION_STOP             -> stopSession()
+            ACTION_PHASE_COMPLETE   -> handlePhaseCompleteIntent()
         }
         return START_STICKY
+    }
+
+    private fun handlePhaseCompleteIntent() {
+        val nowElapsed = SystemClock.elapsedRealtime()
+        if (nowElapsed < expectedCompletionElapsed - 2000) {
+            val trueRemaining = expectedCompletionElapsed - nowElapsed
+            startCountdown(trueRemaining)
+        } else {
+            handleTimerComplete()
+        }
     }
 
     override fun onBind(intent: Intent): IBinder? = null
@@ -181,6 +203,7 @@ class FocusModeService : Service() {
     override fun onDestroy() {
         super.onDestroy()
         tickHandler.removeCallbacksAndMessages(null)
+        cancelCompletionAlarm()
         handler.removeCallbacksAndMessages(null)  // Flaw4: cancel transitionPomodoroPhase callbacks
 
         // ── Record partial stats on force-stop so no focused minutes are lost ──
@@ -269,12 +292,14 @@ class FocusModeService : Service() {
         if (state.pomodoroPhase != PomodoroPhase.SHORT_BREAK &&
             state.pomodoroPhase != PomodoroPhase.LONG_BREAK) return
         tickHandler.removeCallbacksAndMessages(null)
+        cancelCompletionAlarm()
         FocusStats.endPhase(isCompleted = false)
         transitionPomodoroPhase()
     }
 
     private fun stopSession() {
         tickHandler.removeCallbacksAndMessages(null)
+        cancelCompletionAlarm()
         handler.removeCallbacksAndMessages(null)
         SessionPersistence.clear(this)
         Thread { WatchdogManager.stop(this) }.start()
@@ -370,6 +395,7 @@ class FocusModeService : Service() {
         if (state.isPomodoroMode && (state.pomodoroPhase == dev.pranav.reef.timer.PomodoroPhase.SHORT_BREAK || state.pomodoroPhase == dev.pranav.reef.timer.PomodoroPhase.LONG_BREAK)) return
 
         tickHandler.removeCallbacksAndMessages(null)
+        cancelCompletionAlarm()
         TimerStateManager.updateState { copy(isRunning = false, isPaused = true) }
 
         // ── Blocks stay active during pause ──────────────────────────────────
@@ -440,13 +466,12 @@ class FocusModeService : Service() {
 
     private fun startCountdown(timeMillis: Long) {
         tickHandler.removeCallbacksAndMessages(null)
-        // Single source of truth: phaseEndEpoch. Both the in-app timer and the
-        // notification chronometer setWhen() derive remaining from this same value,
-        // eliminating drift between them completely.
         phaseEndEpoch = System.currentTimeMillis() + timeMillis
+        expectedCompletionElapsed = SystemClock.elapsedRealtime() + timeMillis
         lastNotifiedMinute = -1L
         lastCheckpointRemaining = Long.MAX_VALUE
         SessionPersistence.saveRunning(this, TimerStateManager.state.value, timeMillis, initialDuration, TimerStateManager.getPomodoroConfig())
+        scheduleCompletionAlarm(timeMillis)
         tickHandler.post(tickRunnable)
     }
 
@@ -791,6 +816,29 @@ class FocusModeService : Service() {
         } catch (e: Exception) {
             e.printStackTrace()
         }
+    }
+}
+
+    private fun scheduleCompletionAlarm(timeMillis: Long) {
+        val alarmManager = getSystemService(Context.ALARM_SERVICE) as AlarmManager
+        val intent = Intent(this, FocusModeService::class.java).apply { action = ACTION_PHASE_COMPLETE }
+        val pendingIntent = PendingIntent.getService(
+            this, 99, intent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+        val triggerTimeMs = System.currentTimeMillis() + timeMillis
+        val alarmClockInfo = AlarmManager.AlarmClockInfo(triggerTimeMs, null)
+        alarmManager.setAlarmClock(alarmClockInfo, pendingIntent)
+    }
+
+    private fun cancelCompletionAlarm() {
+        val alarmManager = getSystemService(Context.ALARM_SERVICE) as AlarmManager
+        val intent = Intent(this, FocusModeService::class.java).apply { action = ACTION_PHASE_COMPLETE }
+        val pendingIntent = PendingIntent.getService(
+            this, 99, intent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+        alarmManager.cancel(pendingIntent)
     }
 }
 
