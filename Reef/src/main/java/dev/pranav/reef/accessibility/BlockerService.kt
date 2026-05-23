@@ -192,22 +192,27 @@ class BlockerService : AccessibilityService() {
 
         Log.d(TAG, "Found url=$url")
         val domain = sanitizeUrl(url)
+        
+        // --- DIAGNOSTIC TOAST ---
+        android.widget.Toast.makeText(this, "Reef Detected: $domain", android.widget.Toast.LENGTH_SHORT).show()
 
-        if (WebsiteBlocklist.isBlocked(domain)) {
+        val blockedDomain = WebsiteBlocklist.resolveDomain(domain)
+        if (blockedDomain != null) {
             WebsiteUsageTracker.stopTracking()
             performRedirect(config)
-            showWebsiteBlockedNotification(domain, isRoutineBlock = false)
+            showWebsiteBlockedNotification(blockedDomain, isRoutineBlock = false)
             return
         }
 
-        if (WebsiteLimits.hasLimit(domain)) {
-            WebsiteUsageTracker.startTracking(domain)
-            val limit = WebsiteLimits.getLimit(domain)
-            val usage = WebsiteUsageTracker.getDailyUsage(domain)
+        val limitedDomain = WebsiteLimits.resolveDomain(domain)
+        if (limitedDomain != null) {
+            WebsiteUsageTracker.startTracking(limitedDomain)
+            val limit = WebsiteLimits.getLimit(limitedDomain)
+            val usage = WebsiteUsageTracker.getDailyUsage(limitedDomain)
             if (usage >= limit) {
                 WebsiteUsageTracker.stopTracking()
                 performRedirect(config)
-                showWebsiteBlockedNotification(domain, isRoutineBlock = false)
+                showWebsiteBlockedNotification(limitedDomain, isRoutineBlock = false)
             }
         } else {
             WebsiteUsageTracker.stopTracking()

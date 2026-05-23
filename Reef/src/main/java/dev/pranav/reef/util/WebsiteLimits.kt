@@ -15,14 +15,38 @@ object WebsiteLimits {
         limits.clear()
         prefs.all.forEach { (k, v) ->
             if (v is Long) limits[k] = v
+        
+    fun resolveDomain(domain: String): String? {
+        if (sharedPreferences.contains(domain)) return domain
+        for (limited in sharedPreferences.all.keys) {
+            if (domain.endsWith(".$limited") || domain == limited) return limited
         }
+        return null
     }
+}
+    
+    fun resolveDomain(domain: String): String? {
+        if (sharedPreferences.contains(domain)) return domain
+        for (limited in sharedPreferences.all.keys) {
+            if (domain.endsWith(".$limited") || domain == limited) return limited
+        }
+        return null
+    }
+}
 
     fun setLimit(domain: String, minutes: Int) {
         val limitMs = minutes * 60_000L
         limits[domain] = limitMs
         save()
+    
+    fun resolveDomain(domain: String): String? {
+        if (sharedPreferences.contains(domain)) return domain
+        for (limited in sharedPreferences.all.keys) {
+            if (domain.endsWith(".$limited") || domain == limited) return limited
+        }
+        return null
     }
+}
 
     fun getLimit(domain: String): Long = limits[domain] ?: 0L
 
@@ -31,7 +55,15 @@ object WebsiteLimits {
     fun removeLimit(domain: String) {
         limits.remove(domain)
         save()
+    
+    fun resolveDomain(domain: String): String? {
+        if (sharedPreferences.contains(domain)) return domain
+        for (limited in sharedPreferences.all.keys) {
+            if (domain.endsWith(".$limited") || domain == limited) return limited
+        }
+        return null
     }
+}
 
     fun getDomainsWithLimits(): Map<String, Long> = limits.toMap()
 
@@ -39,8 +71,40 @@ object WebsiteLimits {
         check(::prefs.isInitialized)
         prefs.edit {
             clear()
-            limits.forEach { putLong(it.key, it.value) }
+            limits.forEach { putLong(it.key, it.value) 
+    fun resolveDomain(domain: String): String? {
+        if (sharedPreferences.contains(domain)) return domain
+        for (limited in sharedPreferences.all.keys) {
+            if (domain.endsWith(".$limited") || domain == limited) return limited
         }
+        return null
+    }
+}
+        
+    fun resolveDomain(domain: String): String? {
+        if (sharedPreferences.contains(domain)) return domain
+        for (limited in sharedPreferences.all.keys) {
+            if (domain.endsWith(".$limited") || domain == limited) return limited
+        }
+        return null
+    }
+}
+    
+    fun resolveDomain(domain: String): String? {
+        if (sharedPreferences.contains(domain)) return domain
+        for (limited in sharedPreferences.all.keys) {
+            if (domain.endsWith(".$limited") || domain == limited) return limited
+        }
+        return null
+    }
+}
+
+    fun resolveDomain(domain: String): String? {
+        if (sharedPreferences.contains(domain)) return domain
+        for (limited in sharedPreferences.all.keys) {
+            if (domain.endsWith(".$limited") || domain == limited) return limited
+        }
+        return null
     }
 }
 

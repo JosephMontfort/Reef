@@ -150,6 +150,15 @@ class FocusModeService : Service() {
         }
     }
 
+    
+    private val exactAlarmReceiver = object : android.content.BroadcastReceiver() {
+        override fun onReceive(context: android.content.Context?, intent: android.content.Intent?) {
+            if (intent?.action == "dev.pranav.reef.EXACT_ALARM_TICK") {
+                android.util.Log.i("FocusModeService", "Broadcast WakeLock fired! Bypassing Doze queue.")
+                handlePhaseCompleteIntent()
+            }
+        }
+    }
     private val screenOnReceiver = object : android.content.BroadcastReceiver() {
         override fun onReceive(context: android.content.Context?, intent: android.content.Intent?) {
             if (intent?.action == android.content.Intent.ACTION_SCREEN_ON) {
@@ -182,6 +191,12 @@ class FocusModeService : Service() {
             addAction(android.content.Intent.ACTION_TIMEZONE_CHANGED)
         }
         registerReceiver(timeChangeReceiver, timeFilter)
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
+            registerReceiver(exactAlarmReceiver, android.content.IntentFilter("dev.pranav.reef.EXACT_ALARM_TICK"), RECEIVER_NOT_EXPORTED)
+        } else {
+            @Suppress("UnspecifiedRegisterReceiverFlag")
+            registerReceiver(exactAlarmReceiver, android.content.IntentFilter("dev.pranav.reef.EXACT_ALARM_TICK"))
+        }
     }
 
     // ─── Lifecycle ──────────────────────────────────────────────────────────────
@@ -247,6 +262,7 @@ class FocusModeService : Service() {
         }
         runCatching { unregisterReceiver(screenOnReceiver) }
         runCatching { unregisterReceiver(timeChangeReceiver) }
+        runCatching { unregisterReceiver(exactAlarmReceiver) }
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
             stopForeground(STOP_FOREGROUND_REMOVE)
@@ -857,18 +873,13 @@ class FocusModeService : Service() {
 
     private fun scheduleCompletionAlarm(timeMillis: Long) {
         val alarmManager = getSystemService(android.content.Context.ALARM_SERVICE) as AlarmManager
-        val intent = Intent(this, FocusModeService::class.java).apply { action = ACTION_PHASE_COMPLETE }
-        val pendingIntent = if (android.os.Build.VERSION.SDK_INT >= 26) {
-            PendingIntent.getForegroundService(
-                this, 99, intent,
-                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-            )
-        } else {
-            PendingIntent.getService(
-                this, 99, intent,
-                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-            )
+        val intent = Intent("dev.pranav.reef.EXACT_ALARM_TICK").setPackage(packageName).apply {
+            addFlags(Intent.FLAG_RECEIVER_FOREGROUND)
         }
+        val pendingIntent = PendingIntent.getBroadcast(
+            this, 99, intent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
         val triggerTimeMs = System.currentTimeMillis() + timeMillis
         val alarmClockInfo = AlarmManager.AlarmClockInfo(triggerTimeMs, null)
         try {
@@ -882,18 +893,13 @@ class FocusModeService : Service() {
 
     private fun cancelCompletionAlarm() {
         val alarmManager = getSystemService(android.content.Context.ALARM_SERVICE) as AlarmManager
-        val intent = Intent(this, FocusModeService::class.java).apply { action = ACTION_PHASE_COMPLETE }
-        val pendingIntent = if (android.os.Build.VERSION.SDK_INT >= 26) {
-            PendingIntent.getForegroundService(
-                this, 99, intent,
-                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-            )
-        } else {
-            PendingIntent.getService(
-                this, 99, intent,
-                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-            )
+        val intent = Intent("dev.pranav.reef.EXACT_ALARM_TICK").setPackage(packageName).apply {
+            addFlags(Intent.FLAG_RECEIVER_FOREGROUND)
         }
+        val pendingIntent = PendingIntent.getBroadcast(
+            this, 99, intent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
         alarmManager.cancel(pendingIntent)
     }
 }
