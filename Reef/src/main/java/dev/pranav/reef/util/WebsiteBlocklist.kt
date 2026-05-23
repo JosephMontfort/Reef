@@ -9,82 +9,26 @@ object WebsiteBlocklist {
 
     fun init(context: Context) {
         sharedPreferences = context.getSharedPreferences("website_blocklist", Context.MODE_PRIVATE)
-    
-    fun resolveDomain(domain: String): String? {
-        if (sharedPreferences.getBoolean(domain, false)) return domain
-        for (blocked in getBlockedDomains()) {
-            if (domain.endsWith(".$blocked") || domain == blocked) return blocked
-        }
-        return null
     }
-}
 
     fun isBlocked(domain: String): Boolean {
         return sharedPreferences.getBoolean(domain, false)
-    
-    fun resolveDomain(domain: String): String? {
-        if (sharedPreferences.getBoolean(domain, false)) return domain
-        for (blocked in getBlockedDomains()) {
-            if (domain.endsWith(".$blocked") || domain == blocked) return blocked
-        }
-        return null
     }
-}
 
     fun addDomain(domain: String) {
-        sharedPreferences.edit { putBoolean(domain, true) 
-    fun resolveDomain(domain: String): String? {
-        if (sharedPreferences.getBoolean(domain, false)) return domain
-        for (blocked in getBlockedDomains()) {
-            if (domain.endsWith(".$blocked") || domain == blocked) return blocked
-        }
-        return null
+        sharedPreferences.edit { putBoolean(domain, true) }
     }
-}
-    
-    fun resolveDomain(domain: String): String? {
-        if (sharedPreferences.getBoolean(domain, false)) return domain
-        for (blocked in getBlockedDomains()) {
-            if (domain.endsWith(".$blocked") || domain == blocked) return blocked
-        }
-        return null
-    }
-}
 
     fun removeDomain(domain: String) {
-        sharedPreferences.edit { remove(domain) 
-    fun resolveDomain(domain: String): String? {
-        if (sharedPreferences.getBoolean(domain, false)) return domain
-        for (blocked in getBlockedDomains()) {
-            if (domain.endsWith(".$blocked") || domain == blocked) return blocked
-        }
-        return null
+        sharedPreferences.edit { remove(domain) }
     }
-}
-    
-    fun resolveDomain(domain: String): String? {
-        if (sharedPreferences.getBoolean(domain, false)) return domain
-        for (blocked in getBlockedDomains()) {
-            if (domain.endsWith(".$blocked") || domain == blocked) return blocked
-        }
-        return null
-    }
-}
 
     fun getBlockedDomains(): Set<String> {
         return sharedPreferences.all.keys
-    
-    fun resolveDomain(domain: String): String? {
-        if (sharedPreferences.getBoolean(domain, false)) return domain
-        for (blocked in getBlockedDomains()) {
-            if (domain.endsWith(".$blocked") || domain == blocked) return blocked
-        }
-        return null
     }
-}
 
     fun resolveDomain(domain: String): String? {
-        if (sharedPreferences.getBoolean(domain, false)) return domain
+        if (isBlocked(domain)) return domain
         for (blocked in getBlockedDomains()) {
             if (domain.endsWith(".$blocked") || domain == blocked) return blocked
         }
