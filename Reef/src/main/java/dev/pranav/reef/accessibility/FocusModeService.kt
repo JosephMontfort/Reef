@@ -61,7 +61,7 @@ class FocusModeService : Service() {
     private val tickHandler = android.os.Handler(android.os.Looper.getMainLooper())
     private val tickRunnable = object : Runnable {
         override fun run() {
-            val remaining = (phaseEndEpoch - System.currentTimeMillis()).coerceAtLeast(0L)
+            val remaining = (expectedCompletionElapsed - android.os.SystemClock.elapsedRealtime()).coerceAtLeast(0L)
             if (!TimerStateManager.state.value.isPaused) {
                 TimerStateManager.updateState { copy(timeRemaining = remaining) }
                 broadcastTimerUpdate(formatTime(remaining))
@@ -122,6 +122,34 @@ class FocusModeService : Service() {
             .setPackage(packageName))
     }
 
+    
+    private val timeChangeReceiver = object : android.content.BroadcastReceiver() {
+        override fun onReceive(context: android.content.Context?, intent: android.content.Intent?) {
+            if (intent?.action == android.content.Intent.ACTION_TIME_CHANGED || 
+                intent?.action == android.content.Intent.ACTION_TIMEZONE_CHANGED) {
+                
+                val state = TimerStateManager.state.value
+                if (state.isRunning) {
+                    // Ask the unalterable CPU exactly how much real time is left
+                    val trueRemaining = (expectedCompletionElapsed - android.os.SystemClock.elapsedRealtime()).coerceAtLeast(0L)
+                    
+                    // Re-anchor the visual Wall Clock horizon to the new fake time
+                    phaseEndEpoch = System.currentTimeMillis() + trueRemaining
+                    
+                    android.util.Log.i("FocusModeService", "Live time cheat detected! Recalibrating UI.")
+                    
+                    // Force the OS to instantly redraw the chronometer
+                    postNotification(
+                        title = getNotificationTitle(),
+                        isRunning = true,
+                        showPauseButton = !state.isStrictMode && !TimerStateManager.isInBreak(),
+                        timeLeft = trueRemaining
+                    )
+                }
+            }
+        }
+    }
+
     private val screenOnReceiver = object : android.content.BroadcastReceiver() {
         override fun onReceive(context: android.content.Context?, intent: android.content.Intent?) {
             if (intent?.action == android.content.Intent.ACTION_SCREEN_ON) {
@@ -149,6 +177,11 @@ class FocusModeService : Service() {
             }
         }
         registerReceiver(screenOnReceiver, android.content.IntentFilter(android.content.Intent.ACTION_SCREEN_ON))
+        val timeFilter = android.content.IntentFilter().apply {
+            addAction(android.content.Intent.ACTION_TIME_CHANGED)
+            addAction(android.content.Intent.ACTION_TIMEZONE_CHANGED)
+        }
+        registerReceiver(timeChangeReceiver, timeFilter)
     }
 
     // ─── Lifecycle ──────────────────────────────────────────────────────────────
@@ -213,6 +246,7 @@ class FocusModeService : Service() {
             FocusStats.endSession(isCompleted = false)
         }
         runCatching { unregisterReceiver(screenOnReceiver) }
+        runCatching { unregisterReceiver(timeChangeReceiver) }
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
             stopForeground(STOP_FOREGROUND_REMOVE)
