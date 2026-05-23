@@ -60,7 +60,9 @@ object ResilienceManager {
     }
 
     private fun buildPendingIntent(context: Context): PendingIntent {
-        val intent = Intent(ACTION_RESILIENCE_PING).setPackage(context.packageName)
+        val intent = Intent(ACTION_RESILIENCE_PING).setPackage(context.packageName).apply {
+            addFlags(Intent.FLAG_RECEIVER_FOREGROUND)
+        }
         return PendingIntent.getBroadcast(
             context, REQUEST_CODE, intent,
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
@@ -71,10 +73,24 @@ object ResilienceManager {
 class ResilienceReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
         if (intent.action != ResilienceManager.ACTION_RESILIENCE_PING) return
-        // Only reschedule if session is still active; user pref is not consulted
-        // here because stop() already cancelled the alarm when session ended.
+        
         if (SessionPersistence.hasActiveSession(context)) {
-            AppBlockerService.start(context)
+            // If memory state is wiped (isRunning & isPaused are false), the main process was killed.
+            val state = dev.pranav.reef.timer.TimerStateManager.state.value
+            if (!state.isRunning && !state.isPaused) {
+                android.util.Log.i("ResilienceManager", "Process death detected! Reviving FocusModeService.")
+                val reviveIntent = Intent(context, dev.pranav.reef.accessibility.FocusModeService::class.java).apply {
+                    action = dev.pranav.reef.accessibility.FocusModeService.ACTION_RESUME_PERSISTED
+                }
+                if (android.os.Build.VERSION.SDK_INT >= 26) {
+                    context.startForegroundService(reviveIntent)
+                } else {
+                    context.startService(reviveIntent)
+                }
+            } else {
+                // Process is alive. Just ensure blocker is running.
+                AppBlockerService.start(context)
+            }
             ResilienceManager.start(context)
         } else {
             ResilienceManager.stop(context)
