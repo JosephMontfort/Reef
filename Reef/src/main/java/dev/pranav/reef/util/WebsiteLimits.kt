@@ -8,28 +8,28 @@ private const val PREF_WEBSITE_LIMITS = "website_limits"
 
 object WebsiteLimits {
     private lateinit var prefs: SharedPreferences
-    private val limits = mutableMapOf<String, Long>() // domain to limit in ms
+    private val limits = mutableMapOf<String, Long>()
 
     fun init(context: Context) {
         prefs = context.getSharedPreferences(PREF_WEBSITE_LIMITS, Context.MODE_PRIVATE)
         limits.clear()
-        prefs.all.forEach { (k, v) ->
-            if (v is Long) limits[k] = v
-        }
+        prefs.all.forEach { (k, v) -> if (v is Long) limits[clean(k)] = v }
     }
 
+    private fun clean(url: String): String = url.lowercase().trim()
+        .removePrefix("https://").removePrefix("http://").removePrefix("www.").substringBefore('/')
+
     fun setLimit(domain: String, minutes: Int) {
-        val limitMs = minutes * 60_000L
-        limits[domain] = limitMs
+        limits[clean(domain)] = minutes * 60_000L
         save()
     }
 
-    fun getLimit(domain: String): Long = limits[domain] ?: 0L
+    fun getLimit(domain: String): Long = limits[clean(domain)] ?: 0L
 
-    fun hasLimit(domain: String): Boolean = limits.containsKey(domain)
+    fun hasLimit(domain: String): Boolean = limits.containsKey(clean(domain))
 
     fun removeLimit(domain: String) {
-        limits.remove(domain)
+        limits.remove(clean(domain))
         save()
     }
 
@@ -39,14 +39,16 @@ object WebsiteLimits {
         check(::prefs.isInitialized)
         prefs.edit {
             clear()
-            limits.forEach { putLong(it.key, it.value) }
+            limits.forEach { putLong(clean(it.key), it.value) }
         }
     }
 
     fun resolveDomain(domain: String): String? {
-        if (limits.containsKey(domain)) return domain
+        val searchDomain = clean(domain)
+        if (limits.containsKey(searchDomain)) return searchDomain
         for (limited in limits.keys) {
-            if (domain.endsWith(".$limited") || domain == limited) return limited
+            val cleanLimited = clean(limited)
+            if (searchDomain.endsWith(".$cleanLimited") || searchDomain == cleanLimited) return limited
         }
         return null
     }

@@ -11,26 +11,23 @@ object WebsiteBlocklist {
         sharedPreferences = context.getSharedPreferences("website_blocklist", Context.MODE_PRIVATE)
     }
 
-    fun isBlocked(domain: String): Boolean {
-        return sharedPreferences.getBoolean(domain, false)
-    }
+    private fun clean(url: String): String = url.lowercase().trim()
+        .removePrefix("https://").removePrefix("http://").removePrefix("www.").substringBefore('/')
 
-    fun addDomain(domain: String) {
-        sharedPreferences.edit { putBoolean(domain, true) }
-    }
+    fun isBlocked(domain: String): Boolean = sharedPreferences.getBoolean(clean(domain), false)
 
-    fun removeDomain(domain: String) {
-        sharedPreferences.edit { remove(domain) }
-    }
+    fun addDomain(domain: String) = sharedPreferences.edit { putBoolean(clean(domain), true) }
 
-    fun getBlockedDomains(): Set<String> {
-        return sharedPreferences.all.keys
-    }
+    fun removeDomain(domain: String) = sharedPreferences.edit { remove(clean(domain)) }
+
+    fun getBlockedDomains(): Set<String> = sharedPreferences.all.keys
 
     fun resolveDomain(domain: String): String? {
-        if (isBlocked(domain)) return domain
+        val searchDomain = clean(domain)
+        if (isBlocked(searchDomain)) return searchDomain
         for (blocked in getBlockedDomains()) {
-            if (domain.endsWith(".$blocked") || domain == blocked) return blocked
+            val cleanBlocked = clean(blocked)
+            if (searchDomain.endsWith(".$cleanBlocked") || searchDomain == cleanBlocked) return blocked
         }
         return null
     }
