@@ -139,7 +139,7 @@ object Whitelist {
         "com.google.android.calendar",
         "com.google.android.deskclock",
         "com.google.android.apps.classroom",
-        "com.google.android.apps.meet",            // Kept Meet, removed Duo
+        "com.google.android.apps.meet",
         "com.google.android.gm",
         "com.microsoft.office.word",
         "com.microsoft.office.excel",
@@ -163,119 +163,6 @@ object Whitelist {
         "com.evernote",
         "com.google.android.calculator",
         "com.google.android.apps.maps"
-    ) ─────────────────────
-        "com.openai.chatgpt",                // ChatGPT
-        "com.google.android.apps.bard",      // Google Bard (old package)
-        "com.google.android.apps.gemini",    // Google Gemini
-        "com.anthropic.claude",              // Claude
-        "com.microsoft.copilot",             // Microsoft Copilot
-        "com.perplexity.app",                // Perplexity AI
-
-        // ── Google productivity suite ─────────────────────────────────────
-        "com.google.android.apps.docs",
-        "com.google.android.apps.docs.editor.docs",
-        "com.google.android.apps.docs.editor.sheets",
-        "com.google.android.apps.sheets",
-        "com.google.android.apps.slides",
-        "com.google.android.apps.drive",
-        "com.google.android.keep",           // Google Keep
-        "com.google.android.apps.tasks",
-        "com.google.android.apps.paidtasks",
-        "com.google.android.calendar",
-        "com.google.android.deskclock",      // Clock / Alarms
-        "com.google.android.apps.classroom", // Google Classroom
-        "com.google.android.apps.meet",      // Google Meet
-        "com.google.android.gm",             // Gmail
-        "com.google.android.apps.tachyon",   // Google Duo / Meet legacy
-
-        // ── Photos & media pickers (needed by ChatGPT, Gemini etc.) ──────
-        "com.google.android.apps.photos",
-        "com.google.android.apps.photosgo",
-        "com.miui.gallery",                  // Xiaomi Gallery
-        "com.sec.android.gallery3d",         // Samsung Gallery
-        "com.coloros.gallery3d",             // OPPO/Realme Gallery
-        "com.bbk.album",                     // Vivo Album
-        "com.huawei.photos",                 // Huawei Gallery
-        "com.android.gallery3d",             // AOSP Gallery
-        // Media picker provider packages that appear when apps request images/videos
-        "com.google.android.providers.media.module",
-        "com.android.providers.media",
-        "com.android.providers.media.module",
-
-        // ── Microsoft Office / Teams ──────────────────────────────────────
-        "com.microsoft.office.word",
-        "com.microsoft.office.excel",
-        "com.microsoft.office.powerpoint",
-        "com.microsoft.office.onenote",
-        "com.microsoft.todos",
-        "com.microsoft.teams",
-        "com.microsoft.launcher.enterprise",
-
-        // ── Education / E-learning ────────────────────────────────────────
-        "org.khanacademy.android",           // Khan Academy
-        "com.duolingo",                      // Duolingo
-        "com.coursera.android",              // Coursera
-        "com.edx.mobile",                    // edX
-        "com.udemy.android",                 // Udemy
-        "com.byju.learning",                 // BYJU'S
-        "in.bhanzu.android",                 // Bhanzu
-        "com.vedantu",                        // Vedantu
-        "com.unacademy",                     // Unacademy
-        "com.meritnation",                   // Merit Nation
-        "com.toppr",                          // Toppr
-        "com.doubtnut.app",                  // Doubtnut
-        "io.codelearn.codelearnapp",         // CodeLearn
-        "com.sololearn",                     // SoloLearn
-        "com.mimo.android",                  // Mimo (coding)
-        "com.grasshopper.android",           // Grasshopper (Google coding)
-        "com.quizlet.quizletandroid",        // Quizlet
-        "com.ankidroid.anki",                // AnkiDroid flashcards
-        "com.memrise.android.memrisecompanion", // Memrise
-
-        // ── Note-taking / writing ─────────────────────────────────────────
-        "md.obsidian",                       // Obsidian
-        "com.notion.id",                     // Notion
-        "com.evernote",                      // Evernote
-        "com.microsoft.office.onenote",
-        "net.cozic.joplin",                  // Joplin
-        "org.standardnotes",                 // Standard Notes
-        "com.simplenote.android",            // Simplenote
-
-        // ── Focus / study tools ───────────────────────────────────────────
-        "com.tiknil.focusflow",              // Focus Flow
-        "com.flora.focus",                   // Flora
-        "com.brilliantapp",                  // Brilliant
-
-        // ── Communication (work) ──────────────────────────────────────────
-        "com.slack",
-
-        // ── Calculators ──────────────────────────────────────────────────
-        "com.sadellie.calculator",
-        "com.google.android.calculator",
-        "com.sec.android.app.popupcalculator", // Samsung calc
-
-        // ── Authentication ────────────────────────────────────────────────
-        "com.google.android.apps.authenticator2",
-        "me.jmh.authenticatorpro",
-        "com.authy.authy",
-
-        // ── Maps / navigation (practical utility) ─────────────────────────
-        "com.google.android.apps.maps",
-        "net.osmand",
-
-        // ── Camera apps (system) — appear in launcher but are system apps ─
-        "com.google.android.GoogleCamera",
-        "com.android.camera2",
-        "com.sec.android.app.camera",        // Samsung camera
-        "com.miui.camera",                   // MIUI camera
-        "com.coloros.camera",                // OPPO camera
-        "com.vivo.camera",                   // Vivo camera
-        "com.huawei.camera",                 // Huawei camera
-        "com.lineageos.aperture",
-        "com.lineageos.aperture.dev",
-
-        // ── MicroG / alternative frameworks ──────────────────────────────
-        "app.revanced.android.gms",
     )
 
     fun isWhitelisted(packageName: String): Boolean {
