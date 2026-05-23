@@ -122,7 +122,6 @@ class BlockerService : AccessibilityService() {
 
     override fun onServiceConnected() {
         super.onServiceConnected()
-        configureService()
         createNotificationChannel()
         keyguardManager = getSystemService(KEYGUARD_SERVICE) as KeyguardManager
 
@@ -163,15 +162,7 @@ class BlockerService : AccessibilityService() {
         }, 3_000L)
     }
 
-    private fun configureService() {
-        serviceInfo = AccessibilityServiceInfo().apply {
-            eventTypes = AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED or
-                    AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED
-            feedbackType = AccessibilityServiceInfo.FEEDBACK_GENERIC
-            flags = AccessibilityServiceInfo.FLAG_REPORT_VIEW_IDS
-            notificationTimeout = 100
-        }
-    }
+
 
     override fun onAccessibilityEvent(event: AccessibilityEvent) {
         if (keyguardManager?.isKeyguardLocked == true) return
