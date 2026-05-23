@@ -50,7 +50,7 @@ class AppBlockerService : android.app.Service() {
     private fun checkForegroundAndBlock() {
         val pkg = getCurrentForegroundApp() ?: return
         if (pkg == packageName) return
-        val isAllowed = Whitelist.isWhitelisted(pkg) && pkg != defaultLauncherPkg
+        val isAllowed = (packageManager.getLaunchIntentForPackage(pkg) == null || Whitelist.isWhitelisted(pkg)) && pkg != defaultLauncherPkg
         if (!isAllowed && !HomeBlockOverlayService.isShowing) {
             HomeBlockOverlayService.start(this)
         }
@@ -190,7 +190,7 @@ class AppBlockerService : android.app.Service() {
 
         // ── Home-block mode: persistent overlay for all non-whitelisted (incl. launcher) ──
         if (focusMode && blockHomeScreen) {
-            val isAllowed = Whitelist.isWhitelisted(pkg) && pkg != defaultLauncherPkg
+            val isAllowed = (packageManager.getLaunchIntentForPackage(pkg) == null || Whitelist.isWhitelisted(pkg)) && pkg != defaultLauncherPkg
             if (isAllowed) {
                 // Whitelisted non-launcher app opened — dismiss overlay
                 if (HomeBlockOverlayService.isShowing) {
@@ -214,7 +214,7 @@ class AppBlockerService : android.app.Service() {
         if (attempt != null && (now - attempt.time) < BLOCK_COOLDOWN_MS) return
 
         if (focusMode) {
-            if (!Whitelist.isWhitelisted(pkg)) {
+            if (packageManager.getLaunchIntentForPackage(pkg) != null && packageManager.getLaunchIntentForPackage(pkg) != null && !Whitelist.isWhitelisted(pkg)) {
                 FocusStats.recordBlockEvent(pkg, "focus_mode")
                 triggerBlock(pkg, UsageTracker.BlockReason.FOCUS_MODE, now)
                 return
@@ -247,7 +247,7 @@ class AppBlockerService : android.app.Service() {
             handler.postDelayed({
                 val currentFg = getCurrentForegroundApp()
                 if (currentFg == pkg && prefs.getBoolean("focus_mode", false) &&
-                    !Whitelist.isWhitelisted(pkg)) {
+                    packageManager.getLaunchIntentForPackage(pkg) != null && !Whitelist.isWhitelisted(pkg)) {
                     val prev = blockAttempts[pkg] ?: return@postDelayed
                     blockAttempts[pkg] = prev.copy(
                         time = System.currentTimeMillis(),

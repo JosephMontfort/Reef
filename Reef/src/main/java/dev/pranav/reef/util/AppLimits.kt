@@ -121,10 +121,49 @@ object Whitelist {
      * Update this list as new popular study/productivity apps emerge.
      */
     val productiveApps = hashSetOf(
-        // ── Reef itself ─────────────────────────────────────────────────────
         "dev.pranav.reef",
-
-        // ── AI assistants (used for studying / work) ─────────────────────
+        "com.google.android.googlequicksearchbox", // Core Google App
+        "com.openai.chatgpt",                      // ChatGPT
+        "com.google.android.apps.gemini",          // Google Gemini
+        "com.anthropic.claude",                    // Claude
+        "com.microsoft.copilot",                   // Copilot
+        "com.perplexity.app",                      // Perplexity AI
+        "com.google.android.apps.docs",
+        "com.google.android.apps.docs.editor.docs",
+        "com.google.android.apps.docs.editor.sheets",
+        "com.google.android.apps.sheets",
+        "com.google.android.apps.slides",
+        "com.google.android.apps.drive",
+        "com.google.android.keep",
+        "com.google.android.apps.tasks",
+        "com.google.android.calendar",
+        "com.google.android.deskclock",
+        "com.google.android.apps.classroom",
+        "com.google.android.apps.meet",            // Kept Meet, removed Duo
+        "com.google.android.gm",
+        "com.microsoft.office.word",
+        "com.microsoft.office.excel",
+        "com.microsoft.office.powerpoint",
+        "com.microsoft.office.onenote",
+        "com.microsoft.todos",
+        "com.microsoft.teams",
+        "org.khanacademy.android",
+        "com.duolingo",
+        "com.coursera.android",
+        "com.edx.mobile",
+        "com.udemy.android",
+        "com.byju.learning",
+        "com.vedantu",
+        "com.unacademy",
+        "com.sololearn",
+        "com.quizlet.quizletandroid",
+        "com.ankidroid.anki",
+        "md.obsidian",
+        "com.notion.id",
+        "com.evernote",
+        "com.google.android.calculator",
+        "com.google.android.apps.maps"
+    ) ─────────────────────
         "com.openai.chatgpt",                // ChatGPT
         "com.google.android.apps.bard",      // Google Bard (old package)
         "com.google.android.apps.gemini",    // Google Gemini
@@ -203,7 +242,6 @@ object Whitelist {
         "com.simplenote.android",            // Simplenote
 
         // ── Focus / study tools ───────────────────────────────────────────
-        "com.forestapp.Forest",              // Forest (study timer)
         "com.tiknil.focusflow",              // Focus Flow
         "com.flora.focus",                   // Flora
         "com.brilliantapp",                  // Brilliant
