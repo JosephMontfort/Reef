@@ -74,18 +74,20 @@ class BlockerService : AccessibilityService() {
                 if (currentDomain != null && WebsiteLimits.hasLimit(currentDomain)) {
                     val limit = WebsiteLimits.getLimit(currentDomain)
                     val usage = WebsiteUsageTracker.getDailyUsage(currentDomain)
-                    Log.d(TAG, "limit=$limit, usage=$usage for $currentDomain")
                     if (usage >= limit) {
+                        android.widget.Toast.makeText(this@BlockerService, "Reef Limit Reached: $currentDomain", android.widget.Toast.LENGTH_SHORT).show()
                         WebsiteUsageTracker.stopTracking()
                         val config = activeBrowserPackage?.let { browserConfigs[it] }
                         if (config != null) {
                             performRedirect(config)
-                            showWebsiteBlockedNotification(currentDomain, isRoutineBlock = false)
+                        } else {
+                            performGlobalAction(GLOBAL_ACTION_HOME)
                         }
+                        showWebsiteBlockedNotification(currentDomain, isRoutineBlock = false)
                     }
                 }
             } catch (e: Exception) {
-                Log.e(TAG, "Website limit poll error", e)
+                android.util.Log.e("BlockerService", "Website limit poll error", e)
             }
             handler.postDelayed(this, WEBSITE_POLL_INTERVAL_MS)
         }
@@ -241,8 +243,15 @@ class BlockerService : AccessibilityService() {
             .substringBefore('/')
 
     private fun performRedirect(config: BrowserConfig) {
-        val initialRoot = rootInActiveWindow ?: return
-        val urlBar = findUrlBarNode(initialRoot, config.urlBarId) ?: return
+        val initialRoot = rootInActiveWindow
+        val urlBar = initialRoot?.let { findUrlBarNode(it, config.urlBarId) }
+        
+        if (urlBar == null) {
+            // URL bar is hidden (user scrolled down). Kick them to the Home Screen!
+            performGlobalAction(GLOBAL_ACTION_HOME)
+            return
+        }
+
         urlBar.performAction(AccessibilityNodeInfo.ACTION_CLICK)
 
         handler.postDelayed({
