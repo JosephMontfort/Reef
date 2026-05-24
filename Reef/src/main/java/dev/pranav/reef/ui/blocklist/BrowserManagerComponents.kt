@@ -1,19 +1,29 @@
 package dev.pranav.reef.ui.blocklist
 
 import android.content.Context
+import android.content.Intent
 import android.content.pm.PackageManager
+import android.graphics.drawable.Drawable
+import androidx.compose.foundation.Image
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.core.graphics.drawable.toBitmap
 import dev.pranav.reef.R
 import dev.pranav.reef.util.prefs
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 
 val defaultBrowserConfigs = mapOf(
     "com.android.chrome" to "Chrome",
@@ -31,8 +41,9 @@ val defaultBrowserConfigs = mapOf(
 fun getInstalledSupportedBrowsers(context: Context): List<String> {
     val pm = context.packageManager
     val installed = mutableListOf<String>()
-    val customSet = prefs.getStringSet("custom_browsers", emptySet()) ?: emptySet()
-    val allBrowsers = defaultBrowserConfigs.keys + customSet.map { it.split(";;")[0] }
+    val customSetRaw = prefs.getStringSet("custom_browsers", emptySet()) ?: emptySet()
+    val customSet = customSetRaw.map { it.split(";;")[0] }.toSet()
+    val allBrowsers = defaultBrowserConfigs.keys + customSet
 
     for (pkg in allBrowsers.distinct()) {
         try {
@@ -44,6 +55,23 @@ fun getInstalledSupportedBrowsers(context: Context): List<String> {
         }
     }
     return installed.sorted()
+}
+
+data class AppInfo(val packageName: String, val label: String, val icon: Drawable?)
+
+suspend fun getLauncherApps(context: Context): List<AppInfo> = withContext(Dispatchers.IO) {
+    val pm = context.packageManager
+    val intent = Intent(Intent.ACTION_MAIN, null).apply { addCategory(Intent.CATEGORY_LAUNCHER) }
+    val resolveInfos = pm.queryIntentActivities(intent, 0)
+    
+    resolveInfos.map {
+        val pkg = it.activityInfo.packageName
+        AppInfo(
+            packageName = pkg,
+            label = it.loadLabel(pm).toString(),
+            icon = it.loadIcon(pm)
+        )
+    }.distinctBy { it.packageName }.sortedBy { it.label.lowercase() }
 }
 
 @Composable
@@ -74,7 +102,7 @@ fun SupportedBrowsersCard(onAddCustomClick: () -> Unit) {
             
             if (installedBrowsers.isEmpty()) {
                 Text(
-                    "No supported browsers found. Blocking won't work.",
+                    "No supported browsers found.",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.error
                 )
@@ -97,10 +125,15 @@ fun CustomBrowserDialog(
 ) {
     if (!showDialog) return
     
+    val context = LocalContext.current
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
-    var pkgName by remember { mutableStateOf("") }
-    var urlBarId by remember { mutableStateOf("") }
-    var suggestionBoxId by remember { mutableStateOf("") }
+    var apps by remember { mutableStateOf<List<AppInfo>>(emptyList()) }
+    var isLoading by remember { mutableStateOf(true) }
+
+    LaunchedEffect(Unit) {
+        apps = getLauncherApps(context)
+        isLoading = false
+    }
 
     ModalBottomSheet(
         onDismissRequest = onDismiss,
@@ -110,70 +143,52 @@ fun CustomBrowserDialog(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 24.dp)
-                .padding(bottom = 32.dp),
+                .fillMaxHeight(0.85f)
+                .padding(bottom = 16.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
             Text(
-                text = "Add Custom Browser",
+                text = "Select Custom Browser",
                 style = MaterialTheme.typography.headlineSmall,
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp),
                 textAlign = TextAlign.Center
             )
             
             Text(
-                text = "Provide Accessibility View IDs for advanced blocking. (e.g. com.example.browser:id/url_bar)",
+                text = "Reef's Accessibility AI will dynamically lock onto the URL bar for the selected app.",
                 style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(horizontal = 24.dp),
+                textAlign = TextAlign.Center
             )
 
-            OutlinedTextField(
-                value = pkgName,
-                onValueChange = { pkgName = it },
-                singleLine = true,
-                label = { Text("Package Name (e.g. com.android.chrome)") },
-                modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(16.dp)
-            )
-
-            OutlinedTextField(
-                value = urlBarId,
-                onValueChange = { urlBarId = it },
-                singleLine = true,
-                label = { Text("URL Bar ID") },
-                modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(16.dp)
-            )
-
-            OutlinedTextField(
-                value = suggestionBoxId,
-                onValueChange = { suggestionBoxId = it },
-                singleLine = true,
-                label = { Text("Suggestion Box ID (Optional)") },
-                modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(16.dp)
-            )
-
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.End
-            ) {
-                TextButton(onClick = onDismiss) {
-                    Text(stringResource(R.string.cancel))
+            if (isLoading) {
+                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                    CircularProgressIndicator()
                 }
-                Spacer(Modifier.width(8.dp))
-                Button(
-                    onClick = {
-                        if (pkgName.isNotBlank() && urlBarId.isNotBlank()) {
-                            val currentSet = prefs.getStringSet("custom_browsers", emptySet())?.toMutableSet() ?: mutableSetOf()
-                            val sugId = if (suggestionBoxId.isNotBlank()) suggestionBoxId else urlBarId
-                            currentSet.add("${pkgName.trim()};;${urlBarId.trim()};;${sugId.trim()};;false;;0")
-                            prefs.edit().putStringSet("custom_browsers", currentSet).apply()
-                            onDismiss()
-                        }
+            } else {
+                LazyColumn(modifier = Modifier.fillMaxSize()) {
+                    items(apps, key = { it.packageName }) { app ->
+                        ListItem(
+                            modifier = Modifier.clickable {
+                                val currentSet = prefs.getStringSet("custom_browsers", emptySet())?.toMutableSet() ?: mutableSetOf()
+                                currentSet.add(app.packageName)
+                                prefs.edit().putStringSet("custom_browsers", currentSet).apply()
+                                onDismiss()
+                            },
+                            headlineContent = { Text(app.label) },
+                            supportingContent = { Text(app.packageName) },
+                            leadingContent = {
+                                app.icon?.let { drawable ->
+                                    Image(
+                                        bitmap = drawable.toBitmap(120, 120).asImageBitmap(),
+                                        contentDescription = null,
+                                        modifier = Modifier.size(40.dp)
+                                    )
+                                }
+                            }
+                        )
                     }
-                ) {
-                    Text(stringResource(R.string.save))
                 }
             }
         }

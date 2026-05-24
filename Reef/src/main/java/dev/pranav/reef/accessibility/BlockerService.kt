@@ -77,9 +77,12 @@ class BlockerService : AccessibilityService() {
                     if (usage >= limit) {
                         android.widget.Toast.makeText(this@BlockerService, "Reef Limit Reached: $currentDomain", android.widget.Toast.LENGTH_SHORT).show()
                         WebsiteUsageTracker.stopTracking()
+                        
+                        val isCustomBrowser = prefs.getStringSet("custom_browsers", emptySet())?.any { activeBrowserPackage?.startsWith(it.split(";;")[0]) == true } == true
                         val config = activeBrowserPackage?.let { browserConfigs[it] }
-                        if (config != null) {
-                            performRedirect(config)
+                        
+                        if (config != null || isCustomBrowser) {
+                            performRedirect(config, isCustomBrowser)
                         } else {
                             performGlobalAction(GLOBAL_ACTION_HOME)
                         }
@@ -194,9 +197,12 @@ class BlockerService : AccessibilityService() {
         val pkg = event.packageName?.toString() ?: return
         if (pkg == packageName) return
 
-        // Track which browser is currently active
+        val customBrowsersRaw = prefs.getStringSet("custom_browsers", emptySet()) ?: emptySet()
+        val customBrowsers = customBrowsersRaw.map { it.split(";;")[0] }.toSet()
+        val isCustomBrowser = customBrowsers.contains(pkg)
+
         if (event.eventType == AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED) {
-            if (!browserConfigs.containsKey(pkg)) {
+            if (!browserConfigs.containsKey(pkg) && !isCustomBrowser) {
                 WebsiteUsageTracker.stopTracking()
                 activeBrowserPackage = null
             } else {
@@ -204,16 +210,18 @@ class BlockerService : AccessibilityService() {
             }
         }
 
-        // Only act on browser packages — app blocking is handled by AppBlockerService
-        val config = browserConfigs[pkg] ?: return
-        // Use rootInActiveWindow only — event.source is the node that changed (e.g., a content
-        // div on the page), not the window root. findAccessibilityNodeInfosByViewId on a
-        // content node never finds the URL bar, causing false "no URL → stop tracking" calls.
-        val root = rootInActiveWindow ?: return  // transient null during window transitions — skip
-        val urlBarNode = findUrlBarNode(root, config.urlBarId) ?: return
-        val url = extractUrlFromNode(urlBarNode) ?: return  // Don't stopTracking here —
-        // isFocused/editing state is transient; stopping tracking on every edit event
-        // breaks time-limit accounting. Tracking stops only on browser → other-app transition.
+        if (!browserConfigs.containsKey(pkg) && !isCustomBrowser) return
+
+        val config = browserConfigs[pkg]
+        val root = rootInActiveWindow ?: return
+        
+        val urlBarNode = if (isCustomBrowser) {
+            findDynamicUrlBarNode(root)
+        } else {
+            config?.let { findUrlBarNode(root, it.urlBarId) }
+        } ?: return
+
+        val url = extractUrlFromNode(urlBarNode) ?: return
 
         Log.d(TAG, "Found url=$url")
         val domain = sanitizeUrl(url)
@@ -222,7 +230,7 @@ class BlockerService : AccessibilityService() {
         if (blockedDomain != null) {
             android.widget.Toast.makeText(this, "Reef Blocked: $blockedDomain", android.widget.Toast.LENGTH_SHORT).show()
             WebsiteUsageTracker.stopTracking()
-            performRedirect(config)
+            performRedirect(config, isCustomBrowser)
             showWebsiteBlockedNotification(blockedDomain, isRoutineBlock = false)
             return
         }
@@ -235,7 +243,7 @@ class BlockerService : AccessibilityService() {
             if (usage >= limit) {
                 android.widget.Toast.makeText(this, "Reef Limit Reached: $limitedDomain", android.widget.Toast.LENGTH_SHORT).show()
                 WebsiteUsageTracker.stopTracking()
-                performRedirect(config)
+                performRedirect(config, isCustomBrowser)
                 showWebsiteBlockedNotification(limitedDomain, isRoutineBlock = false)
             }
         } else {
@@ -265,12 +273,15 @@ class BlockerService : AccessibilityService() {
             .replace("www.", "")
             .substringBefore('/')
 
-    private fun performRedirect(config: BrowserConfig) {
+    private fun performRedirect(config: BrowserConfig?, isCustomBrowser: Boolean) {
         val initialRoot = rootInActiveWindow
-        val urlBar = initialRoot?.let { findUrlBarNode(it, config.urlBarId) }
+        val urlBar = if (isCustomBrowser) {
+             initialRoot?.let { findDynamicUrlBarNode(it) }
+        } else {
+             initialRoot?.let { findUrlBarNode(it, config!!.urlBarId) }
+        }
         
         if (urlBar == null) {
-            // URL bar is hidden (user scrolled down). Kick them to the Home Screen!
             performGlobalAction(GLOBAL_ACTION_HOME)
             return
         }
@@ -279,28 +290,50 @@ class BlockerService : AccessibilityService() {
 
         handler.postDelayed({
             val editRoot = rootInActiveWindow ?: return@postDelayed
-            val editText = findUrlBarNode(editRoot, config.urlBarId) ?: return@postDelayed
+            val editText = if (isCustomBrowser) findDynamicUrlBarNode(editRoot) else findUrlBarNode(editRoot, config!!.urlBarId)
+            if (editText == null) return@postDelayed
+            
             val args = Bundle().apply {
-                putCharSequence(
-                    AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE,
-                    redirectUrl
-                )
+                putCharSequence(AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE, redirectUrl)
             }
             editText.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT, args)
+            
             handler.postDelayed({
                 val finalRoot = rootInActiveWindow ?: return@postDelayed
-                val finalBar = findUrlBarNode(finalRoot, config.urlBarId)
-                // Try IME_ENTER first (API 30+, most reliable) — simulates pressing Go/Enter
-                // on the keyboard without depending on the suggestion-dropdown structure.
+                val finalBar = if (isCustomBrowser) findDynamicUrlBarNode(finalRoot) else findUrlBarNode(finalRoot, config!!.urlBarId)
+                
                 val imeEnterPerformed = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.R) {
                     finalBar?.performAction(AccessibilityNodeInfo.AccessibilityAction.ACTION_IME_ENTER.id) ?: false
                 } else false
-                if (!imeEnterPerformed) {
-                    // Fall back to clicking the suggestion box (older API path)
+                
+                if (!imeEnterPerformed && !isCustomBrowser && config != null) {
                     performGoAction(finalRoot, config)
                 }
             }, 300)
         }, 300)
+    }
+
+    private fun findDynamicUrlBarNode(root: AccessibilityNodeInfo): AccessibilityNodeInfo? {
+        val queue = java.util.LinkedList<AccessibilityNodeInfo>()
+        queue.add(root)
+        var fallback: AccessibilityNodeInfo? = null
+        
+        while (queue.isNotEmpty()) {
+            val node = queue.poll() ?: continue
+            if (node.isEditable) {
+                val id = node.viewIdResourceName?.lowercase() ?: ""
+                // 1. Precise Heuristic: Node is editable and its ID suggests it's a URL/Search bar
+                if (id.contains("url") || id.contains("address") || id.contains("search") || id.contains("omnibox") || id.contains("edit")) {
+                    return node
+                }
+                // 2. Fallback Heuristic: Save the very first editable field we find just in case
+                if (fallback == null) fallback = node
+            }
+            for (i in 0 until node.childCount) {
+                node.getChild(i)?.let { queue.add(it) }
+            }
+        }
+        return fallback
     }
 
     private fun performGoAction(root: AccessibilityNodeInfo, config: BrowserConfig) {
