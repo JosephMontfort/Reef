@@ -179,23 +179,12 @@ fun AppIntroScreen() {
                 }
             },
             customContent = {
-                // Wrap the component in a dark-mode styled theme so the text 
-                // and buttons blend beautifully with the orange slide background
-                MaterialTheme(
-                    colorScheme = MaterialTheme.colorScheme.copy(
-                        onSurface = Color.White,
-                        onSurfaceVariant = Color.White.copy(alpha = 0.85f),
-                        primary = Color.White,
-                        onPrimary = Color(0xFFE65100)
-                    )
-                ) {
-                    OverlayPermissionStep(
-                        onPermissionsFullyGranted = {
-                            // Left empty because once the UI shifts to "Permissions Granted!",
-                            // the user can simply click the app's native Next button.
-                        }
-                    )
-                }
+                OverlayPermissionStep(
+                    onPermissionsFullyGranted = {
+                        // Left empty because once the UI shifts to "Permissions Granted!",
+                        // the user can simply click the app's native Next button.
+                    }
+                )
             }
         ),
 
