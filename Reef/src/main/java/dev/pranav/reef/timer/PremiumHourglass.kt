@@ -12,6 +12,7 @@ import androidx.compose.ui.graphics.*
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.clipPath
 import androidx.compose.ui.unit.dp
+import kotlin.math.sin
 
 @Composable
 fun PremiumHourglass(
@@ -19,24 +20,21 @@ fun PremiumHourglass(
     isActive: Boolean,
     modifier: Modifier = Modifier
 ) {
-    // Stream animation for falling granular sand
     val infiniteTransition = rememberInfiniteTransition(label = "stream")
     val streamPhase by infiniteTransition.animateFloat(
         initialValue = 0f,
         targetValue = 1f,
         animationSpec = infiniteRepeatable(
-            animation = tween(600, easing = LinearEasing)
+            animation = tween(800, easing = LinearEasing)
         ),
         label = "sand_stream"
     )
 
-    // Ultra-Premium Colors
-    val sandColorDark = Color(0xFFD4AF37)   // 3D Depth Gold
-    val sandColorLight = Color(0xFFFDE047)  // Highlight Gold
-    val glassColorLight = Color(0x99FFFFFF) // Thick Glass
-    val glassColorDark = Color(0x1AFFFFFF)  // Thin Glass
+    val sandColorDark = Color(0xFFD4AF37)
+    val sandColorLight = Color(0xFFFDE047)
+    val glassColorLight = Color(0x99FFFFFF)
+    val glassColorDark = Color(0x1AFFFFFF)
     
-    // Smooth progress interpolation so it drains like liquid
     val smoothProgress by animateFloatAsState(
         targetValue = progress.coerceIn(0f, 1f),
         animationSpec = tween(1000, easing = LinearOutSlowInEasing),
@@ -52,7 +50,6 @@ fun PremiumHourglass(
         val bulbH = h * 0.44f
         val neckW = w * 0.08f
 
-        // 1. Draw The 3D Glass Path
         val glassPath = Path().apply {
             moveTo(cx - bulbW/2, 0f)
             lineTo(cx + bulbW/2, 0f)
@@ -64,7 +61,6 @@ fun PremiumHourglass(
             close()
         }
 
-        // Glass Depth Background
         val glassBrush = Brush.horizontalGradient(
             colors = listOf(glassColorDark, glassColorLight, glassColorDark),
             startX = cx - bulbW/2,
@@ -72,19 +68,15 @@ fun PremiumHourglass(
         )
         drawPath(glassPath, brush = glassBrush)
 
-        // 2. Volumetric Sand Drawing
         clipPath(glassPath) {
-            
-            // TOP SAND (Shrinking Cylinder)
             val topSandH = bulbH * smoothProgress
             val topSandY = bulbH - topSandH
             if (smoothProgress > 0.01f) {
                 drawRect(
                     brush = Brush.horizontalGradient(listOf(sandColorDark, sandColorLight, sandColorDark)),
                     topLeft = Offset(0f, topSandY),
-                    size = Size(w, topSandH + (cy - bulbH)) // Extends down to neck
+                    size = Size(w, topSandH + (cy - bulbH))
                 )
-                // Simulated 3D Top Surface (Ellipse)
                 val topSurfaceW = bulbW * (1f - (topSandY/bulbH).coerceIn(0f, 1f))
                 drawOval(
                     color = sandColorLight,
@@ -93,12 +85,11 @@ fun PremiumHourglass(
                 )
             }
 
-            // BOTTOM SAND (Growing Pyramid)
             val bottomSandH = bulbH * (1f - smoothProgress)
             val bottomSandY = h - bottomSandH
             if (smoothProgress < 0.99f) {
                 val bottomSandPath = Path().apply {
-                    moveTo(cx, h - bottomSandH - 15f) // Peak of the pyramid
+                    moveTo(cx, h - bottomSandH - 15f)
                     lineTo(cx + bulbW/2, h)
                     lineTo(cx - bulbW/2, h)
                     close()
@@ -109,22 +100,19 @@ fun PremiumHourglass(
                 )
             }
 
-            // FALLING GRANULAR STREAM
-            if (isActive && smoothProgress > 0f && smoothProgress < 1f) {
+            // FIXED STREAM: Continuous fluid stream with a subtle width pulse instead of chunky squares
+            if (isActive && smoothProgress > 0.01f && smoothProgress < 0.99f) {
+                val pulse = (sin(streamPhase * Math.PI * 2) * 2f).toFloat()
                 drawLine(
-                    color = sandColorLight,
+                    color = sandColorLight.copy(alpha = 0.85f),
                     start = Offset(cx, cy),
                     end = Offset(cx, bottomSandY),
-                    strokeWidth = neckW * 0.5f,
-                    pathEffect = PathEffect.dashPathEffect(
-                        intervals = floatArrayOf(15f, 10f), // Granular dots
-                        phase = streamPhase * 25f          // Animation speed
-                    )
+                    strokeWidth = (neckW * 0.4f) + pulse,
+                    cap = StrokeCap.Round
                 )
             }
         }
 
-        // 3. Specular Highlight (The Glass Reflection)
         val highlightPath = Path().apply {
             moveTo(cx - bulbW/2 + 10f, 15f)
             cubicTo(cx - bulbW/2 + 10f, bulbH * 0.6f, cx - neckW + 5f, bulbH, cx - neckW/2 + 2f, cy)
@@ -135,7 +123,6 @@ fun PremiumHourglass(
             style = Stroke(width = 6f, cap = StrokeCap.Round)
         )
 
-        // 4. Premium Dark Chrome Caps
         val capBrush = Brush.verticalGradient(
             colors = listOf(Color(0xFF424949), Color(0xFF1B2631))
         )
