@@ -100,25 +100,48 @@ class BlockerService : AccessibilityService() {
         val suggestionBoxChildIndex: Int = 0
     )
 
-    private val browserConfigs = mapOf(
-        "com.android.chrome" to BrowserConfig(
-            urlBarId = "com.android.chrome:id/url_bar",
-            suggestionBoxId = "com.android.chrome:id/omnibox_suggestions_dropdown"
-        ),
-        "com.brave.browser" to BrowserConfig(
-            urlBarId = "com.brave.browser:id/url_bar",
-            suggestionBoxId = "com.brave.browser:id/omnibox_suggestions_dropdown"
-        ),
-        "org.mozilla.firefox" to BrowserConfig(
-            urlBarId = "org.mozilla.firefox:id/mozac_browser_toolbar_url_view",
-            suggestionBoxId = "org.mozilla.firefox:id/sfcnt"
-        ),
-        "com.opera.browser" to BrowserConfig(
-            urlBarId = "com.opera.browser:id/url_field",
-            suggestionBoxId = "com.opera.browser:id/right_state_button",
-            isSuggestionBoxEqualToGo = true
-        )
+    private val defaultBrowserConfigs = mapOf(
+        "com.android.chrome" to BrowserConfig("com.android.chrome:id/url_bar", "com.android.chrome:id/omnibox_suggestions_dropdown"),
+        "com.brave.browser" to BrowserConfig("com.brave.browser:id/url_bar", "com.brave.browser:id/omnibox_suggestions_dropdown"),
+        "org.mozilla.firefox" to BrowserConfig("org.mozilla.firefox:id/mozac_browser_toolbar_url_view", "org.mozilla.firefox:id/sfcnt"),
+        "com.opera.browser" to BrowserConfig("com.opera.browser:id/url_field", "com.opera.browser:id/right_state_button", true),
+        "com.microsoft.emmx" to BrowserConfig("com.microsoft.emmx:id/url_bar", "com.microsoft.emmx:id/omnibox_suggestions_dropdown"),
+        "com.duckduckgo.mobile.android" to BrowserConfig("com.duckduckgo.mobile.android:id/omnibarTextInput", "com.duckduckgo.mobile.android:id/browserSuggestionsList"),
+        "com.vivaldi.browser" to BrowserConfig("com.vivaldi.browser:id/url_bar", "com.vivaldi.browser:id/omnibox_suggestions_dropdown"),
+        "com.kiwibrowser.browser" to BrowserConfig("com.kiwibrowser.browser:id/url_bar", "com.kiwibrowser.browser:id/omnibox_suggestions_dropdown"),
+        "com.ecosia.android" to BrowserConfig("com.ecosia.android:id/url_bar", "com.ecosia.android:id/omnibox_suggestions_dropdown"),
+        "org.torproject.torbrowser" to BrowserConfig("org.torproject.torbrowser:id/mozac_browser_toolbar_url_view", "org.torproject.torbrowser:id/sfcnt")
     )
+
+    private var cachedBrowserConfigs: Map<String, BrowserConfig> = emptyMap()
+    private var lastConfigUpdateTime = 0L
+
+    private val browserConfigs: Map<String, BrowserConfig>
+        get() {
+            val now = System.currentTimeMillis()
+            if (now - lastConfigUpdateTime > 5000) {
+                val configs = defaultBrowserConfigs.toMutableMap()
+                try {
+                    val customSet = prefs.getStringSet("custom_browsers", emptySet()) ?: emptySet()
+                    for (custom in customSet) {
+                        val parts = custom.split(";;")
+                        if (parts.size >= 3) {
+                            configs[parts[0]] = BrowserConfig(
+                                urlBarId = parts[1],
+                                suggestionBoxId = parts[2],
+                                isSuggestionBoxEqualToGo = parts.getOrNull(3)?.toBoolean() ?: false,
+                                suggestionBoxChildIndex = parts.getOrNull(4)?.toIntOrNull() ?: 0
+                            )
+                        }
+                    }
+                } catch (e: Exception) {
+                    Log.e(TAG, "Failed to load custom browsers", e)
+                }
+                cachedBrowserConfigs = configs
+                lastConfigUpdateTime = now
+            }
+            return cachedBrowserConfigs
+        }
 
     private val redirectUrl = "about:blank"
 

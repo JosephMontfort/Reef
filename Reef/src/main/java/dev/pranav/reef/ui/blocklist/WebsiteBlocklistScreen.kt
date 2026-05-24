@@ -39,6 +39,7 @@ fun WebsiteBlocklistScreen(onBackPressed: () -> Unit) {
         remember { mutableStateMapOf<String, Long>().apply { putAll(WebsiteLimits.getDomainsWithLimits()) } }
 
     var showAddDialog by remember { mutableStateOf(false) }
+    var showCustomBrowserDialog by remember { mutableStateOf(false) }
     var editingDomain by remember { mutableStateOf<String?>(null) }
     var editingIsLimit by remember { mutableStateOf(false) }
     var editingHours by remember { mutableStateOf(0) }
@@ -150,6 +151,9 @@ fun WebsiteBlocklistScreen(onBackPressed: () -> Unit) {
             item {
                 BlocklistInfoCard()
             }
+            item {
+                SupportedBrowsersCard(onAddCustomClick = { showCustomBrowserDialog = true })
+            }
 
             if (blockedDomains.isEmpty() && limitDomains.isEmpty()) {
                 item {
@@ -216,6 +220,8 @@ fun WebsiteBlocklistScreen(onBackPressed: () -> Unit) {
             }
         }
     }
+
+    CustomBrowserDialog(showDialog = showCustomBrowserDialog, onDismiss = { showCustomBrowserDialog = false })
 
     if (showAddDialog) {
         val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
