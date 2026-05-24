@@ -133,12 +133,12 @@ object SessionPersistence {
                 // REBOOT DETECTED: Phone was off. Trust the wall clock so user gets credit for offline time.
                 Log.i(TAG, "Reboot detected. Using Wall Clock to credit offline time.")
                 val targetWall = p.getLong(KEY_TARGET_WALL_CLOCK, 0L)
-                (targetWall - System.currentTimeMillis()).coerceAtLeast(0L)
+                (targetWall - System.currentTimeMillis())
             } else {
                 // NO REBOOT: Phone was active. Trust CPU uptime to completely block Settings time-change cheats.
                 Log.i(TAG, "No reboot. Using Hardware Uptime to block clock exploits.")
                 val targetUp = p.getLong(KEY_TARGET_UPTIME, 0L)
-                (targetUp - currentUptime).coerceAtLeast(0L)
+                (targetUp - currentUptime)
             }
         }
 

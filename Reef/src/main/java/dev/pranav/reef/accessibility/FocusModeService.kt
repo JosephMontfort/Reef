@@ -96,7 +96,8 @@ class FocusModeService : Service() {
                 val nowElapsed = SystemClock.elapsedRealtime()
                 if (nowElapsed >= expectedCompletionElapsed - 1000) {
                     cancelCompletionAlarm()
-                    handleTimerComplete()
+                    val overflow = (nowElapsed - expectedCompletionElapsed).coerceAtLeast(0L)
+                    handleTimerComplete(overflow)
                 } else {
                     val trueRemaining = expectedCompletionElapsed - nowElapsed
                     startCountdown(trueRemaining)
@@ -645,9 +646,9 @@ class FocusModeService : Service() {
 
     // ─── Timer completion ───────────────────────────────────────────────────────
 
-    private fun handleTimerComplete() {
+    private fun handleTimerComplete(overflowMs: Long = 0L) {
         if (!TimerStateManager.state.value.isPomodoroMode) endSession()
-        else transitionPomodoroPhase()
+        else transitionPomodoroPhase(overflowMs)
     }
 
     private fun endSession() {
@@ -665,12 +666,26 @@ class FocusModeService : Service() {
         stopSelf()
     }
 
-    private fun transitionPomodoroPhase() {
+    private fun transitionPomodoroPhase(initialOverflowMs: Long = 0L) {
         val state = TimerStateManager.state.value
         val config = TimerStateManager.getPomodoroConfig() ?: return endSession()
-        val nextPhase = calculateNextPhase(state, config)
 
         FocusStats.endPhase(isCompleted = true)
+
+        var currentPhaseState = state
+        var currentOverflow = initialOverflowMs
+        var nextPhase = calculateNextPhase(currentPhaseState, config)
+
+        // ── THE CONTINUOUS TIME ENGINE ──
+        // Fast-forward through fully consumed phases (if user was offline for a long time)
+        while (currentOverflow > 0 && currentOverflow >= nextPhase.duration && !nextPhase.isComplete) {
+            currentOverflow -= nextPhase.duration
+            currentPhaseState = currentPhaseState.copy(
+                pomodoroPhase = nextPhase.phase,
+                currentCycle = nextPhase.currentCycle
+            )
+            nextPhase = calculateNextPhase(currentPhaseState, config)
+        }
 
         if (nextPhase.isComplete) {
             prefs.edit { putBoolean("pomodoro_mode", false); remove("pomodoro_current_cycle") }
@@ -678,14 +693,14 @@ class FocusModeService : Service() {
             return
         }
 
+        // Subtract whatever overflow is left from the current phase!
+        val adjustedDuration = nextPhase.duration - currentOverflow
+
         val nextPhaseType = when (nextPhase.phase) {
-            PomodoroPhase.SHORT_BREAK -> PhaseType.SHORT_BREAK
-            PomodoroPhase.LONG_BREAK  -> PhaseType.LONG_BREAK
-            else                      -> PhaseType.FOCUS
+            PomodoroPhase.SHORT_BREAK -> dev.pranav.reef.data.PhaseType.SHORT_BREAK
+            PomodoroPhase.LONG_BREAK  -> dev.pranav.reef.data.PhaseType.LONG_BREAK
+            else                      -> dev.pranav.reef.data.PhaseType.FOCUS
         }
-        // Breaks and the next focus cycle always start automatically.
-        // The only thing that can be paused is an active focus phase (if not in strict mode).
-        // "auto_start_breaks" and "auto_start_pomodoro" toggles have been removed.
 
         val goingToBreak = nextPhase.phase == PomodoroPhase.SHORT_BREAK ||
                 nextPhase.phase == PomodoroPhase.LONG_BREAK
@@ -694,15 +709,14 @@ class FocusModeService : Service() {
         TimerStateManager.updateState {
             copy(
                 pomodoroPhase = nextPhase.phase, currentCycle = nextPhase.currentCycle,
-                timeRemaining = nextPhase.duration,
+                timeRemaining = adjustedDuration,
                 isRunning = true, isPaused = false
             )
         }
         prefs.edit().apply {
             putInt("pomodoro_current_cycle", nextPhase.currentCycle)
-            // focus_mode=true only during focus phases (not breaks)
             putBoolean("focus_mode", goingToFocus)
-            commit() // synchronous — ensures focus_mode is readable before broadcast fires
+            commit()
         }
 
         if (goingToBreak && prefs.getBoolean("block_home_screen", false)) {
@@ -710,15 +724,14 @@ class FocusModeService : Service() {
         }
 
         if (goingToFocus && prefs.getBoolean("block_home_screen", false)) {
-            // Fire immediately (prefs already committed) and again after 1s as safety net
             handler.post { checkForegroundAndApplyBlock() }
             handler.postDelayed({ checkForegroundAndApplyBlock() }, 1_000L)
         }
 
-        initialDuration = nextPhase.duration
+        initialDuration = adjustedDuration
         lastNotifiedMinute = -1L
-        phaseEndEpoch = 0L  // will be set in startCountdown for the new phase
-        FocusStats.startPhase(nextPhaseType, nextPhase.duration)
+        phaseEndEpoch = 0L
+        FocusStats.startPhase(nextPhaseType, adjustedDuration)
 
         if (goingToFocus) {
             enableDNDIfNeeded()
@@ -733,12 +746,13 @@ class FocusModeService : Service() {
         postNotification(
             title = getNotificationTitle(),
             isRunning = true,
-            showPauseButton = goingToFocus && !state.isStrictMode,
-            timeLeft = nextPhase.duration
+            showPauseButton = goingToFocus && !TimerStateManager.state.value.isStrictMode,
+            timeLeft = adjustedDuration
         )
-        broadcastTimerUpdate(formatTime(nextPhase.duration))
-        startCountdown(nextPhase.duration)
+        broadcastTimerUpdate(formatTime(adjustedDuration))
+        startCountdown(adjustedDuration)
     }
+
 
     // ─── Phase calculation ───────────────────────────────────────────────────────
 
