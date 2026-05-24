@@ -142,11 +142,11 @@ object SessionPersistence {
             }
         }
 
-        if (remainingMs <= 0L && !isPaused) {
-            Log.d(TAG, "Persisted session expired naturally offline, clearing")
-            clear(context)
-            return null
-        }
+        // WE DO NOT SILENTLY CLEAR THE SESSION HERE IF remainingMs <= 0.
+        // If we return null, FocusModeService dies without cleaning up the blocking flags,
+        // causing a Zombie Block.
+        // By passing the negative/zero time back, FocusModeService will instantly fire
+        // handleTimerComplete() and transition the Pomodoro phase using the Continuous Time Engine.
 
         val pomodoroConfig = if (isPomodoro) {
             PomodoroConfig(
