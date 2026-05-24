@@ -243,7 +243,8 @@ class FocusModeService : Service() {
             val trueRemaining = expectedCompletionElapsed - nowElapsed
             startCountdown(trueRemaining)
         } else {
-            handleTimerComplete()
+            val overflow = (nowElapsed - expectedCompletionElapsed).coerceAtLeast(0L)
+            handleTimerComplete(overflow)
         }
     }
 
@@ -525,7 +526,9 @@ class FocusModeService : Service() {
         lastNotifiedMinute = -1L
         lastCheckpointRemaining = Long.MAX_VALUE
         SessionPersistence.saveRunning(this, TimerStateManager.state.value, timeMillis, initialDuration, TimerStateManager.getPomodoroConfig())
-        scheduleCompletionAlarm(timeMillis)
+        if (timeMillis > 0) {
+            scheduleCompletionAlarm(timeMillis)
+        }
         tickHandler.post(tickRunnable)
     }
 
@@ -898,7 +901,7 @@ class FocusModeService : Service() {
         val alarmClockInfo = AlarmManager.AlarmClockInfo(triggerTimeMs, null)
         try {
             alarmManager.setAlarmClock(alarmClockInfo, pendingIntent)
-        } catch (e: SecurityException) {
+        } catch (e: Exception) {
             // Fallback: If Android 14+ denies exact alarm permission,
             // swallow the crash. The tickHandler loop acts as the fallback.
             e.printStackTrace()
