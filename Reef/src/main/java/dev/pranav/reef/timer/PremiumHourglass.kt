@@ -2,153 +2,154 @@ package dev.pranav.reef.timer
 
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.Canvas
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
+import androidx.compose.foundation.layout.*
+import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.Path
-import androidx.compose.ui.graphics.StrokeCap
-import androidx.compose.ui.graphics.StrokeJoin
+import androidx.compose.ui.graphics.*
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.clipPath
-import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.unit.dp
 
 @Composable
-fun PremiumHourglass(modifier: Modifier = Modifier) {
-    val transition = rememberInfiniteTransition(label = "Hourglass")
-    
-    // 60-second cycle (60000 ms)
-    val cycleProgress by transition.animateFloat(
+fun PremiumHourglass(
+    progress: Float, // 1f = Full Top, 0f = Empty Top
+    isActive: Boolean,
+    modifier: Modifier = Modifier
+) {
+    // Stream animation for falling granular sand
+    val infiniteTransition = rememberInfiniteTransition(label = "stream")
+    val streamPhase by infiniteTransition.animateFloat(
         initialValue = 0f,
         targetValue = 1f,
         animationSpec = infiniteRepeatable(
-            animation = tween(60000, easing = LinearEasing),
-            repeatMode = RepeatMode.Restart
+            animation = tween(600, easing = LinearEasing)
         ),
-        label = "Cycle"
+        label = "sand_stream"
     )
 
-    // Sand falls for first 95% (57 seconds), flips during last 5% (3 seconds)
-    val sandFallProgress = (cycleProgress / 0.95f).coerceIn(0f, 1f)
+    // Ultra-Premium Colors
+    val sandColorDark = Color(0xFFD4AF37)   // 3D Depth Gold
+    val sandColorLight = Color(0xFFFDE047)  // Highlight Gold
+    val glassColorLight = Color(0x99FFFFFF) // Thick Glass
+    val glassColorDark = Color(0x1AFFFFFF)  // Thin Glass
     
-    val flipAngle = if (cycleProgress > 0.95f) {
-        val flipProgress = (cycleProgress - 0.95f) / 0.05f
-        // Ease in-out for premium smooth flip
-        val easedFlip = CubicBezierEasing(0.42f, 0f, 0.58f, 1f).transform(flipProgress)
-        easedFlip * 180f
-    } else {
-        0f
-    }
+    // Smooth progress interpolation so it drains like liquid
+    val smoothProgress by animateFloatAsState(
+        targetValue = progress.coerceIn(0f, 1f),
+        animationSpec = tween(1000, easing = LinearOutSlowInEasing),
+        label = "drain"
+    )
 
-    val glassOutlineColor = Color.White.copy(alpha = 0.7f)
-    val sandColor = Color(0xFFFACC15) // Premium Gold
-    val frameColor = Color(0xFF1F2937) // Dark Gray
-
-    Canvas(
-        modifier = modifier
-            .size(120.dp)
-            .padding(8.dp)
-            .graphicsLayer {
-                rotationZ = flipAngle
-            }
-    ) {
+    Canvas(modifier = modifier.size(180.dp).padding(16.dp)) {
         val w = size.width
         val h = size.height
         val cx = w / 2
         val cy = h / 2
+        val bulbW = w * 0.75f
+        val bulbH = h * 0.44f
+        val neckW = w * 0.08f
 
-        val frameWidth = w * 0.7f
-        val frameHeight = h * 0.85f
-        val topY = (h - frameHeight) / 2
-        val bottomY = topY + frameHeight
-
-        // Draw premium curved hourglass shape
+        // 1. Draw The 3D Glass Path
         val glassPath = Path().apply {
-            moveTo(cx - frameWidth / 2, topY)
-            lineTo(cx + frameWidth / 2, topY)
-            cubicTo(
-                cx + frameWidth / 2, cy - h * 0.25f,
-                cx + w * 0.1f, cy - h * 0.1f,
-                cx + w * 0.04f, cy
-            )
-            cubicTo(
-                cx + w * 0.1f, cy + h * 0.1f,
-                cx + frameWidth / 2, cy + h * 0.25f,
-                cx + frameWidth / 2, bottomY
-            )
-            lineTo(cx - frameWidth / 2, bottomY)
-            cubicTo(
-                cx - frameWidth / 2, cy + h * 0.25f,
-                cx - w * 0.1f, cy + h * 0.1f,
-                cx - w * 0.04f, cy
-            )
-            cubicTo(
-                cx - w * 0.1f, cy - h * 0.1f,
-                cx - frameWidth / 2, cy - h * 0.25f,
-                cx - frameWidth / 2, topY
-            )
+            moveTo(cx - bulbW/2, 0f)
+            lineTo(cx + bulbW/2, 0f)
+            cubicTo(cx + bulbW/2, bulbH * 0.6f, cx + neckW, bulbH, cx + neckW/2, cy)
+            cubicTo(cx + neckW, h - bulbH, cx + bulbW/2, h - bulbH * 0.6f, cx + bulbW/2, h)
+            lineTo(cx - bulbW/2, h)
+            cubicTo(cx - bulbW/2, h - bulbH * 0.6f, cx - neckW, h - bulbH, cx - neckW/2, cy)
+            cubicTo(cx - neckW, bulbH, cx - bulbW/2, bulbH * 0.6f, cx - bulbW/2, 0f)
             close()
         }
 
+        // Glass Depth Background
+        val glassBrush = Brush.horizontalGradient(
+            colors = listOf(glassColorDark, glassColorLight, glassColorDark),
+            startX = cx - bulbW/2,
+            endX = cx + bulbW/2
+        )
+        drawPath(glassPath, brush = glassBrush)
+
+        // 2. Volumetric Sand Drawing
         clipPath(glassPath) {
-            val maxSandHeight = (cy - topY) * 0.95f
             
-            // Top Sand (shrinking)
-            val topSandHeight = maxSandHeight * (1f - sandFallProgress)
-            drawRect(
-                color = sandColor,
-                topLeft = Offset(0f, cy - topSandHeight),
-                size = Size(w, topSandHeight)
-            )
+            // TOP SAND (Shrinking Cylinder)
+            val topSandH = bulbH * smoothProgress
+            val topSandY = bulbH - topSandH
+            if (smoothProgress > 0.01f) {
+                drawRect(
+                    brush = Brush.horizontalGradient(listOf(sandColorDark, sandColorLight, sandColorDark)),
+                    topLeft = Offset(0f, topSandY),
+                    size = Size(w, topSandH + (cy - bulbH)) // Extends down to neck
+                )
+                // Simulated 3D Top Surface (Ellipse)
+                val topSurfaceW = bulbW * (1f - (topSandY/bulbH).coerceIn(0f, 1f))
+                drawOval(
+                    color = sandColorLight,
+                    topLeft = Offset(cx - topSurfaceW/2, topSandY - 6.dp.toPx()),
+                    size = Size(topSurfaceW, 12.dp.toPx())
+                )
+            }
 
-            // Bottom Sand (growing)
-            val bottomSandHeight = maxSandHeight * sandFallProgress
-            drawRect(
-                color = sandColor,
-                topLeft = Offset(0f, bottomY - bottomSandHeight),
-                size = Size(w, bottomSandHeight)
-            )
+            // BOTTOM SAND (Growing Pyramid)
+            val bottomSandH = bulbH * (1f - smoothProgress)
+            val bottomSandY = h - bottomSandH
+            if (smoothProgress < 0.99f) {
+                val bottomSandPath = Path().apply {
+                    moveTo(cx, h - bottomSandH - 15f) // Peak of the pyramid
+                    lineTo(cx + bulbW/2, h)
+                    lineTo(cx - bulbW/2, h)
+                    close()
+                }
+                drawPath(
+                    path = bottomSandPath,
+                    brush = Brush.horizontalGradient(listOf(sandColorDark, sandColorLight, sandColorDark))
+                )
+            }
 
-            // Falling Stream
-            if (sandFallProgress > 0.01f && sandFallProgress < 0.99f) {
+            // FALLING GRANULAR STREAM
+            if (isActive && smoothProgress > 0f && smoothProgress < 1f) {
                 drawLine(
-                    color = sandColor,
+                    color = sandColorLight,
                     start = Offset(cx, cy),
-                    end = Offset(cx, bottomY - bottomSandHeight + h * 0.02f),
-                    strokeWidth = w * 0.015f,
-                    cap = StrokeCap.Round
+                    end = Offset(cx, bottomSandY),
+                    strokeWidth = neckW * 0.5f,
+                    pathEffect = PathEffect.dashPath(
+                        intervals = floatArrayOf(15f, 10f), // Granular dots
+                        phase = streamPhase * 25f          // Animation speed
+                    )
                 )
             }
         }
 
-        // Glass Outline
+        // 3. Specular Highlight (The Glass Reflection)
+        val highlightPath = Path().apply {
+            moveTo(cx - bulbW/2 + 10f, 15f)
+            cubicTo(cx - bulbW/2 + 10f, bulbH * 0.6f, cx - neckW + 5f, bulbH, cx - neckW/2 + 2f, cy)
+        }
         drawPath(
-            path = glassPath,
-            color = glassOutlineColor,
-            style = Stroke(width = w * 0.02f, join = StrokeJoin.Round)
+            path = highlightPath,
+            color = Color.White.copy(alpha = 0.7f),
+            style = Stroke(width = 6f, cap = StrokeCap.Round)
         )
 
-        // Wood/Metal Caps
-        val capHeight = h * 0.06f
-        val capWidth = frameWidth + w * 0.1f
-        val capCorner = CornerRadius(w * 0.02f, w * 0.02f)
-
+        // 4. Premium Dark Chrome Caps
+        val capBrush = Brush.verticalGradient(
+            colors = listOf(Color(0xFF424949), Color(0xFF1B2631))
+        )
+        val capCorner = CornerRadius(16f, 16f)
         drawRoundRect(
-            color = frameColor,
-            topLeft = Offset(cx - capWidth / 2, topY - capHeight),
-            size = Size(capWidth, capHeight),
+            brush = capBrush,
+            topLeft = Offset(cx - bulbW/2 - 15f, -15f),
+            size = Size(bulbW + 30f, 30f),
             cornerRadius = capCorner
         )
         drawRoundRect(
-            color = frameColor,
-            topLeft = Offset(cx - capWidth / 2, bottomY),
-            size = Size(capWidth, capHeight),
+            brush = capBrush,
+            topLeft = Offset(cx - bulbW/2 - 15f, h - 15f),
+            size = Size(bulbW + 30f, 30f),
             cornerRadius = capCorner
         )
     }
