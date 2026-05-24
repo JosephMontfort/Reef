@@ -91,6 +91,8 @@ fun TimerContent(
             Column(modifier = Modifier.animateContentSize()) {
                 MediumTopAppBar(
                     title = {
+                        PremiumHourglass()
+                        androidx.compose.foundation.layout.Spacer(modifier = androidx.compose.ui.Modifier.height(24.dp))
                         Text(stringResource(R.string.focus_mode_title))
                     },
                     actions = {
