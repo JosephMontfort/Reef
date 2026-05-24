@@ -47,14 +47,7 @@ class AppBlockerService : android.app.Service() {
         }
     }
 
-    private fun checkForegroundAndBlock() {
-        val pkg = getCurrentForegroundApp() ?: return
-        if (pkg == packageName) return
-        val isAllowed = (packageManager.getLaunchIntentForPackage(pkg) == null || Whitelist.isWhitelisted(pkg)) && pkg != defaultLauncherPkg
-        if (!isAllowed && !HomeBlockOverlayService.isShowing) {
-            HomeBlockOverlayService.start(this)
-        }
-    }
+
 
     private val immediatCheckReceiver = object : android.content.BroadcastReceiver() {
         override fun onReceive(context: android.content.Context?, intent: android.content.Intent?) {
@@ -63,7 +56,7 @@ class AppBlockerService : android.app.Service() {
             // prefs can change between send and receive (async delivery race condition).
             if (!prefs.getBoolean("focus_mode", false)) return
             if (!prefs.getBoolean("block_home_screen", false)) return
-            checkForegroundAndBlock()
+            checkForegroundApp()
         }
     }
 
@@ -131,9 +124,8 @@ class AppBlockerService : android.app.Service() {
         // Immediately check what's in foreground when service (re)starts —
         // needed when the nuclear watchdog restarts us while a blocked app
         // or the launcher is already visible.
-        if (prefs.getBoolean("block_home_screen", false) &&
-            prefs.getBoolean("focus_mode", false)) {
-            handler.post { checkForegroundAndBlock() }
+        if (prefs.getBoolean("focus_mode", false)) {
+            handler.post { checkForegroundApp() }
         }
 
         handler.post(appPollRunnable)
@@ -165,19 +157,45 @@ class AppBlockerService : android.app.Service() {
         ServiceCompat.startForeground(this, NOTIFICATION_ID, notification, foregroundServiceType)
     }
 
+    private var lastKnownForegroundApp: String? = null
+
     private fun getCurrentForegroundApp(): String? {
         val usm = getSystemService(Context.USAGE_STATS_SERVICE) as UsageStatsManager
         val now = System.currentTimeMillis()
-        val events = usm.queryEvents(now - EVENT_WINDOW_MS, now)
+        
+        // Smart Deep-Scan: On cold boot (resurrection), look back 1 hour to catch long-running apps.
+        // Once cached, we only look back 3 seconds to save battery on normal polls.
+        val window = if (lastKnownForegroundApp == null) 60 * 60 * 1000L else EVENT_WINDOW_MS
+        
+        val events = usm.queryEvents(now - window, now)
         val event = UsageEvents.Event()
-        var lastPkg: String? = null
+        
         while (events.hasNextEvent()) {
             events.getNextEvent(event)
             if (event.eventType == UsageEvents.Event.MOVE_TO_FOREGROUND) {
-                lastPkg = event.packageName
+                lastKnownForegroundApp = event.packageName
+            } else if (event.eventType == UsageEvents.Event.MOVE_TO_BACKGROUND) {
+                if (lastKnownForegroundApp == event.packageName) {
+                    lastKnownForegroundApp = null
+                }
             }
         }
-        return lastPkg
+        
+        // Ultimate Fallback: If 1-hour scan found nothing, query daily usage stats
+        if (lastKnownForegroundApp == null && window > EVENT_WINDOW_MS) {
+            val stats = usm.queryUsageStats(UsageStatsManager.INTERVAL_DAILY, now - 24 * 60 * 60 * 1000L, now)
+            if (stats != null) {
+                var lastTimeUsed = 0L
+                for (stat in stats) {
+                    if (stat.lastTimeUsed > lastTimeUsed) {
+                        lastTimeUsed = stat.lastTimeUsed
+                        lastKnownForegroundApp = stat.packageName
+                    }
+                }
+            }
+        }
+        
+        return lastKnownForegroundApp
     }
 
     private fun checkForegroundApp() {
