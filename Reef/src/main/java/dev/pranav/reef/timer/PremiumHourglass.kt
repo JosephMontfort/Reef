@@ -116,7 +116,7 @@ fun PremiumHourglass(
                     start = Offset(cx, cy),
                     end = Offset(cx, bottomSandY),
                     strokeWidth = neckW * 0.5f,
-                    pathEffect = PathEffect.dashPath(
+                    pathEffect = PathEffect.dashPathEffect(
                         intervals = floatArrayOf(15f, 10f), // Granular dots
                         phase = streamPhase * 25f          // Animation speed
                     )
