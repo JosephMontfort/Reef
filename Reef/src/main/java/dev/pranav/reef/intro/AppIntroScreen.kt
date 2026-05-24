@@ -161,46 +161,40 @@ fun AppIntroScreen() {
             }
         ),
 
-        // 3. Display Over Other Apps — MANDATORY (required for home-block overlay)
+        // 3. Display Over Other Apps — MANDATORY (Multi-Step OEM Flow)
         IntroPage(
-            title = stringResource(R.string.overlay_permission),
+            title = "",
             description = "",
             backgroundColor = Color(0xFFE65100),
             contentColor = Color.White,
             onNext = {
-                if (!activity!!.hasOverlayPermission()) {
-                    activity.requestOverlayPermission()
+                val hasStandard = Settings.canDrawOverlays(context)
+                val hasOem = dev.pranav.reef.util.OemOverlayManager.isOemOverlayGranted(context)
+                
+                if (!hasStandard || !hasOem) {
+                    android.widget.Toast.makeText(context, "Please complete the required background permissions to proceed", android.widget.Toast.LENGTH_SHORT).show()
                     false
-                } else true
+                } else {
+                    true
+                }
             },
             customContent = {
-                var granted by remember { mutableStateOf(activity?.hasOverlayPermission() == true) }
-                Column(
-                    modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally
+                // Wrap the component in a dark-mode styled theme so the text 
+                // and buttons blend beautifully with the orange slide background
+                MaterialTheme(
+                    colorScheme = MaterialTheme.colorScheme.copy(
+                        onSurface = Color.White,
+                        onSurfaceVariant = Color.White.copy(alpha = 0.85f),
+                        primary = Color.White,
+                        onPrimary = Color(0xFFE65100)
+                    )
                 ) {
-                    Icon(Icons.Rounded.Layers, null, Modifier.size(72.dp), tint = Color.White)
-                    Spacer(Modifier.height(16.dp))
-                    Text(stringResource(R.string.overlay_permission),
-                        style = MaterialTheme.typography.headlineMedium, color = Color.White)
-                    Spacer(Modifier.height(8.dp))
-                    Text(stringResource(R.string.overlay_permission_description),
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = Color.White.copy(alpha = 0.85f), textAlign = TextAlign.Center)
-                    Spacer(Modifier.height(20.dp))
-                    if (granted) {
-                        Text("✓ Permission granted", color = Color.White,
-                            style = MaterialTheme.typography.bodyMedium)
-                    } else {
-                        OutlinedButton(
-                            onClick = {
-                                activity?.requestOverlayPermission()
-                                granted = activity?.hasOverlayPermission() == true
-                            },
-                            border = BorderStroke(1.dp, Color.White),
-                            colors = ButtonDefaults.outlinedButtonColors(contentColor = Color.White)
-                        ) { Text("Grant Permission") }
-                    }
+                    OverlayPermissionStep(
+                        onPermissionsFullyGranted = {
+                            // Left empty because once the UI shifts to "Permissions Granted!",
+                            // the user can simply click the app's native Next button.
+                        }
+                    )
                 }
             }
         ),
