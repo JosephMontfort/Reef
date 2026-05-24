@@ -17,11 +17,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
-import dev.pranav.reef.R
 import dev.pranav.reef.util.OemOverlayManager
 import kotlinx.coroutines.delay
 import java.util.Locale
@@ -31,23 +27,49 @@ fun OverlayPermissionStep(
     onPermissionsFullyGranted: () -> Unit
 ) {
     val context = LocalContext.current
-    
     var lifecycleTrigger by remember { mutableIntStateOf(0) }
     
     val standardGranted = Settings.canDrawOverlays(context)
-    val oemGranted = remember(lifecycleTrigger, standardGranted) { OemOverlayManager.isOemOverlayGranted(context) }
     val needsOem = remember { OemOverlayManager.getOemOverlayIntent(context) != null }
-
-    // 3-Second Timer State
-    var timerTicks by remember { mutableIntStateOf(3) }
+    val isOemGranted = remember(lifecycleTrigger, standardGranted) { OemOverlayManager.isOemOverlayGranted(context) }
     
-    LaunchedEffect(standardGranted, needsOem, oemGranted) {
-        if (standardGranted && needsOem && !oemGranted) {
-            timerTicks = 3
+    var oemInteracted by remember { mutableStateOf(false) }
+    
+    var timerTicks by remember { mutableIntStateOf(5) }
+    var verifyTicks by remember { mutableIntStateOf(3) }
+    
+    LaunchedEffect(standardGranted, needsOem, isOemGranted, oemInteracted) {
+        if (standardGranted && needsOem && !isOemGranted && !oemInteracted) {
+            timerTicks = 5
             while (timerTicks > 0) {
                 delay(1000)
                 timerTicks--
             }
+        }
+    }
+    
+    LaunchedEffect(oemInteracted, isOemGranted) {
+        if (oemInteracted && !isOemGranted) {
+            verifyTicks = 3
+            while (verifyTicks > 0) {
+                delay(1000)
+                verifyTicks--
+            }
+        }
+    }
+
+    val standardLauncher = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) {
+        lifecycleTrigger++
+        if (Settings.canDrawOverlays(context) && (!needsOem || OemOverlayManager.isOemOverlayGranted(context))) {
+            onPermissionsFullyGranted()
+        }
+    }
+
+    val oemLauncher = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) {
+        oemInteracted = true
+        lifecycleTrigger++
+        if (Settings.canDrawOverlays(context) && OemOverlayManager.isOemOverlayGranted(context)) {
+            onPermissionsFullyGranted()
         }
     }
 
@@ -60,140 +82,73 @@ fun OverlayPermissionStep(
         }
     }
 
-    val standardLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.StartActivityForResult()
-    ) {
-        lifecycleTrigger++ 
-        if (Settings.canDrawOverlays(context) && (!needsOem || OemOverlayManager.isOemOverlayGranted(context))) {
-            onPermissionsFullyGranted()
-        }
+    val title: String
+    val desc: String
+    
+    if (!standardGranted) {
+        title = "Display Over Other Apps"
+        desc = "Reef requires this standard permission to display focus screens and block distracting apps. Please grant it in the next screen."
+    } else if (needsOem && !isOemGranted && !oemInteracted) {
+        title = "Crucial Extra Step"
+        desc = "Your device strictly blocks apps from showing focus screens. You MUST find and enable $exactPermissionName on the next screen."
+    } else if (needsOem && !isOemGranted && oemInteracted) {
+        title = "Did you grant it?"
+        desc = "Did you successfully find and enable $exactPermissionName?"
+    } else {
+        title = "All Ready!"
+        desc = "✓ Required permissions granted. Please click the Next arrow below."
+        LaunchedEffect(Unit) { onPermissionsFullyGranted() }
     }
 
-    val oemLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.StartActivityForResult()
+    AnimatedCustomSlide(
+        icon = Icons.Rounded.Layers,
+        title = title,
+        description = desc
     ) {
-        OemOverlayManager.markOemInteracted(context)
-        lifecycleTrigger++
-        if (Settings.canDrawOverlays(context) && OemOverlayManager.isOemOverlayGranted(context)) {
-            onPermissionsFullyGranted()
-        }
-    }
-
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 24.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.Center
-    ) {
-        Icon(
-            imageVector = Icons.Rounded.Layers,
-            contentDescription = null,
-            modifier = Modifier.size(72.dp),
-            tint = Color.White
-        )
-        Spacer(modifier = Modifier.height(16.dp))
-
-        AnimatedContent(targetState = standardGranted, label = "OverlayStateTransition") { isStandardGranted ->
+        AnimatedContent(targetState = "$standardGranted-$oemInteracted-$isOemGranted", label = "") { _ ->
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                
-                // STATE 1: Ask for standard permission
-                if (!isStandardGranted) {
-                    Text(
-                        text = stringResource(R.string.overlay_permission),
-                        style = MaterialTheme.typography.headlineMedium,
-                        color = Color.White,
-                        textAlign = TextAlign.Center
-                    )
-                    Spacer(modifier = Modifier.height(8.dp))
-                    Text(
-                        text = stringResource(R.string.overlay_permission_description),
-                        style = MaterialTheme.typography.bodyMedium,
-                        textAlign = TextAlign.Center,
-                        color = Color.White.copy(alpha = 0.85f)
-                    )
-                    Spacer(modifier = Modifier.height(20.dp))
+                if (!standardGranted) {
                     OutlinedButton(
-                        onClick = {
-                            val intent = Intent(
-                                Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
-                                Uri.parse("package:${context.packageName}")
-                            )
-                            standardLauncher.launch(intent)
-                        },
+                        onClick = { standardLauncher.launch(Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:${context.packageName}"))) },
                         border = BorderStroke(1.dp, Color.White),
                         colors = ButtonDefaults.outlinedButtonColors(contentColor = Color.White)
                     ) {
                         Text("Grant Permission")
                     }
-                } 
-                // STATE 2: Standard granted, but OEM special background permission needed
-                else if (needsOem && !oemGranted) {
-                    Text(
-                        text = "Crucial Extra Step",
-                        style = MaterialTheme.typography.headlineMedium,
-                        color = Color.White,
-                        textAlign = TextAlign.Center
-                    )
-                    Spacer(modifier = Modifier.height(8.dp))
-                    Text(
-                        text = "Your device strictly blocks apps from showing focus screens. You MUST find and enable ",
-                        style = MaterialTheme.typography.bodyMedium,
-                        textAlign = TextAlign.Center,
-                        color = Color.White.copy(alpha = 0.85f)
-                    )
-                    Text(
-                        text = exactPermissionName,
-                        style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Bold),
-                        textAlign = TextAlign.Center,
-                        color = Color.White
-                    )
-                    Text(
-                        text = " on the next screen.",
-                        style = MaterialTheme.typography.bodyMedium,
-                        textAlign = TextAlign.Center,
-                        color = Color.White.copy(alpha = 0.85f)
-                    )
-                    Spacer(modifier = Modifier.height(20.dp))
-                    
+                } else if (needsOem && !isOemGranted && !oemInteracted) {
                     OutlinedButton(
-                        onClick = {
-                            val intent = OemOverlayManager.getOemOverlayIntent(context)
-                            if (intent != null) {
-                                try {
-                                    oemLauncher.launch(intent)
-                                } catch (e: Exception) {
-                                    OemOverlayManager.markOemInteracted(context)
-                                    lifecycleTrigger++
-                                }
-                            }
-                        },
+                        onClick = { OemOverlayManager.getOemOverlayIntent(context)?.let { oemLauncher.launch(it) } },
                         enabled = timerTicks == 0,
                         border = BorderStroke(1.dp, if (timerTicks == 0) Color.White else Color.White.copy(alpha = 0.4f)),
-                        colors = ButtonDefaults.outlinedButtonColors(
-                            contentColor = Color.White,
-                            disabledContentColor = Color.White.copy(alpha = 0.4f)
-                        )
+                        colors = ButtonDefaults.outlinedButtonColors(contentColor = Color.White, disabledContentColor = Color.White.copy(alpha = 0.4f))
                     ) {
-                        Text(if (timerTicks > 0) "Please read carefully ($timerTicks)" else "Grant Additional Permission")
+                        Text(if (timerTicks > 0) "Please read carefully ($timerTicks)" else "Open Settings")
                     }
-                } 
-                // STATE 3: Both standard and OEM are fully granted
-                else {
-                    Text(
-                        text = "All Ready!",
-                        style = MaterialTheme.typography.headlineMedium,
-                        color = Color.White,
-                        textAlign = TextAlign.Center
-                    )
-                    Spacer(modifier = Modifier.height(8.dp))
-                    Text(
-                        text = "✓ Required permissions granted. Please click the Next arrow below.",
-                        style = MaterialTheme.typography.bodyMedium,
-                        textAlign = TextAlign.Center,
-                        color = Color.White
-                    )
-                    // REMOVED THE NON-FUNCTIONAL INNER "NEXT" BUTTON
+                } else if (needsOem && !isOemGranted && oemInteracted) {
+                    Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                        OutlinedButton(
+                            onClick = { 
+                                oemInteracted = false 
+                                timerTicks = 0 // Allow instant retry without waiting
+                            },
+                            border = BorderStroke(1.dp, Color.White),
+                            colors = ButtonDefaults.outlinedButtonColors(contentColor = Color.White)
+                        ) {
+                            Text("No, try again")
+                        }
+                        OutlinedButton(
+                            onClick = { 
+                                OemOverlayManager.markOemVerified(context, true)
+                                lifecycleTrigger++ // Re-evaluates isOemGranted natively
+                                onPermissionsFullyGranted()
+                            },
+                            enabled = verifyTicks == 0,
+                            border = BorderStroke(1.dp, if (verifyTicks == 0) Color.White else Color.White.copy(alpha = 0.4f)),
+                            colors = ButtonDefaults.outlinedButtonColors(contentColor = Color.White, disabledContentColor = Color.White.copy(alpha = 0.4f))
+                        ) {
+                            Text(if (verifyTicks > 0) "Yes, I enabled it ($verifyTicks)" else "Yes, I enabled it")
+                        }
+                    }
                 }
             }
         }

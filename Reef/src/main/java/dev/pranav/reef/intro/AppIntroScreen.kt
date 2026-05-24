@@ -109,38 +109,17 @@ fun AppIntroScreen() {
         // App blocking via UsageStats works without it. Users can grant it later from the
         // Website Blocklist screen when they first try to use website limits.
         IntroPage(
-            title = stringResource(R.string.accessibility_service),
+            title = "",
             description = "",
             backgroundColor = Color(0xFF607D8B),
             contentColor = Color.White,
             onNext = { true },
             customContent = {
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 24.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally
+                AnimatedCustomSlide(
+                    icon = Icons.Rounded.AccessibilityNew,
+                    title = stringResource(R.string.accessibility_service),
+                    description = stringResource(R.string.accessibility_service_website_only_description)
                 ) {
-                    Icon(
-                        imageVector = Icons.Rounded.AccessibilityNew,
-                        contentDescription = null,
-                        modifier = Modifier.size(72.dp),
-                        tint = Color.White
-                    )
-                    Spacer(modifier = Modifier.height(16.dp))
-                    Text(
-                        text = stringResource(R.string.accessibility_service),
-                        style = MaterialTheme.typography.headlineMedium,
-                        color = Color.White
-                    )
-                    Spacer(modifier = Modifier.height(8.dp))
-                    Text(
-                        text = stringResource(R.string.accessibility_service_website_only_description),
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = Color.White.copy(alpha = 0.85f),
-                        textAlign = TextAlign.Center
-                    )
-                    Spacer(modifier = Modifier.height(20.dp))
                     val accessGranted = context.isAccessibilityServiceEnabledForBlocker()
                     if (!accessGranted) {
                         OutlinedButton(
@@ -180,10 +159,7 @@ fun AppIntroScreen() {
             },
             customContent = {
                 OverlayPermissionStep(
-                    onPermissionsFullyGranted = {
-                        // Left empty because once the UI shifts to "Permissions Granted!",
-                        // the user can simply click the app's native Next button.
-                    }
+                    onPermissionsFullyGranted = {}
                 )
             }
         ),
@@ -191,29 +167,17 @@ fun AppIntroScreen() {
         // 4. Autostart — MANDATORY on Chinese OEMs, auto-passes on stock Android
         if (!doesNotNeedAutostartGrant()) {
             IntroPage(
-                title = stringResource(R.string.autostart_permission),
+                title = "",
                 description = "",
                 backgroundColor = Color(0xFF1B5E20),
                 contentColor = Color.White,
-                onNext = {
-                    // On Chinese OEMs there is no API to verify autostart state, so we
-                    // trust the user tapped the button and accepted. Allow proceeding.
-                    true
-                },
+                onNext = { true },
                 customContent = {
-                    Column(
-                        modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp),
-                        horizontalAlignment = Alignment.CenterHorizontally
+                    AnimatedCustomSlide(
+                        icon = Icons.Rounded.RestartAlt,
+                        title = stringResource(R.string.autostart_permission),
+                        description = stringResource(R.string.autostart_permission_description)
                     ) {
-                        Icon(Icons.Rounded.RestartAlt, null, Modifier.size(72.dp), tint = Color.White)
-                        Spacer(Modifier.height(16.dp))
-                        Text(stringResource(R.string.autostart_permission),
-                            style = MaterialTheme.typography.headlineMedium, color = Color.White)
-                        Spacer(Modifier.height(8.dp))
-                        Text(stringResource(R.string.autostart_permission_description),
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = Color.White.copy(alpha = 0.85f), textAlign = TextAlign.Center)
-                        Spacer(Modifier.height(20.dp))
                         OutlinedButton(
                             onClick = { activity?.requestAutostartPermission() },
                             border = BorderStroke(1.dp, Color.White),
@@ -317,4 +281,97 @@ fun AppIntroScreen() {
         nextButtonText = stringResource(R.string.next),
         finishButtonText = stringResource(R.string.get_started)
     )
+}
+
+@Composable
+fun AnimatedCustomSlide(
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    title: String,
+    description: String,
+    content: @Composable () -> Unit
+) {
+    val contentVisible = remember { androidx.compose.animation.core.MutableTransitionState(false) }
+    LaunchedEffect(Unit) { contentVisible.targetState = true }
+
+    Column(
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center,
+        modifier = Modifier.fillMaxSize().padding(bottom = 80.dp)
+    ) {
+        androidx.compose.animation.AnimatedVisibility(
+            visibleState = contentVisible,
+            enter = androidx.compose.animation.fadeIn(androidx.compose.animation.core.tween(300)) + 
+                    androidx.compose.animation.scaleIn(
+                        animationSpec = androidx.compose.animation.core.spring(
+                            dampingRatio = androidx.compose.animation.core.Spring.DampingRatioMediumBouncy,
+                            stiffness = androidx.compose.animation.core.Spring.StiffnessLow
+                        ),
+                        initialScale = 0.8f
+                    )
+        ) {
+            Surface(
+                modifier = Modifier.size(140.dp).clip(androidx.compose.foundation.shape.CircleShape),
+                shape = androidx.compose.foundation.shape.CircleShape,
+                color = Color.White.copy(alpha = 0.15f)
+            ) {
+                Icon(
+                    imageVector = icon,
+                    contentDescription = null,
+                    tint = Color.White,
+                    modifier = Modifier.padding(32.dp).size(76.dp)
+                )
+            }
+        }
+
+        Spacer(modifier = Modifier.height(40.dp))
+
+        androidx.compose.animation.AnimatedVisibility(
+            visibleState = contentVisible,
+            enter = androidx.compose.animation.fadeIn(androidx.compose.animation.core.tween(300, delayMillis = 100)) +
+                    androidx.compose.animation.slideInVertically(
+                        animationSpec = androidx.compose.animation.core.spring(
+                            dampingRatio = androidx.compose.animation.core.Spring.DampingRatioMediumBouncy,
+                            stiffness = androidx.compose.animation.core.Spring.StiffnessLow
+                        ),
+                        initialOffsetY = { it / 3 }
+                    )
+        ) {
+            Text(
+                text = title,
+                style = MaterialTheme.typography.headlineMedium,
+                fontWeight = androidx.compose.ui.text.font.FontWeight.Bold,
+                color = Color.White,
+                textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                modifier = Modifier.fillMaxWidth()
+            )
+        }
+
+        Spacer(modifier = Modifier.height(16.dp))
+
+        androidx.compose.animation.AnimatedVisibility(
+            visibleState = contentVisible,
+            enter = androidx.compose.animation.fadeIn(androidx.compose.animation.core.tween(300, delayMillis = 200)) +
+                    androidx.compose.animation.slideInVertically(
+                        animationSpec = androidx.compose.animation.core.spring(
+                            dampingRatio = androidx.compose.animation.core.Spring.DampingRatioMediumBouncy,
+                            stiffness = androidx.compose.animation.core.Spring.StiffnessLow
+                        ),
+                        initialOffsetY = { it / 4 }
+                    )
+        ) {
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally,
+                modifier = Modifier.fillMaxWidth(0.9f)
+            ) {
+                Text(
+                    text = description,
+                    style = MaterialTheme.typography.bodyLarge,
+                    color = Color.White.copy(alpha = 0.8f),
+                    textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                )
+                Spacer(modifier = Modifier.height(24.dp))
+                content()
+            }
+        }
+    }
 }
