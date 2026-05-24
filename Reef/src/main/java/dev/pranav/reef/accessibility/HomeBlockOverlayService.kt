@@ -69,6 +69,7 @@ class HomeBlockOverlayService : Service(), LifecycleOwner, SavedStateRegistryOwn
 
     override fun onCreate() {
         super.onCreate()
+        promoteToForeground() // Satisfy Android 12+ 5-second deadline instantly
 
         // Restore saved state before any Compose work
         savedStateRegistryController.performRestore(null)
@@ -90,7 +91,6 @@ class HomeBlockOverlayService : Service(), LifecycleOwner, SavedStateRegistryOwn
             registerReceiver(dismissReceiver, IntentFilter(ACTION_DISMISS))
         }
 
-        promoteToForeground()
         addOverlayWindow()
         isShowing = true
     }
@@ -110,6 +110,11 @@ class HomeBlockOverlayService : Service(), LifecycleOwner, SavedStateRegistryOwn
             stopForeground(STOP_FOREGROUND_REMOVE)
         }
         super.onDestroy()
+    }
+
+    override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        promoteToForeground()
+        return START_STICKY
     }
 
     override fun onBind(intent: Intent?): IBinder? = null
@@ -201,12 +206,22 @@ class HomeBlockOverlayService : Service(), LifecycleOwner, SavedStateRegistryOwn
 
         fun start(context: Context) {
             if (!Settings.canDrawOverlays(context)) {
-                Log.w(TAG, "SYSTEM_ALERT_WINDOW not granted — overlay suppressed")
+                android.util.Log.w(TAG, "SYSTEM_ALERT_WINDOW not granted — overlay suppressed")
                 return
             }
-            context.startForegroundService(
-                Intent(context, HomeBlockOverlayService::class.java)
-            )
+            // CRITICAL FIX: Because we have SYSTEM_ALERT_WINDOW, we are legally exempt from
+            // background service restrictions. By using startService() instead of startForegroundService()
+            // here, we bypass the OS's fatal 5-second crash timer entirely!
+            try {
+                context.startService(Intent(context, HomeBlockOverlayService::class.java))
+            } catch (e: Exception) {
+                android.util.Log.e(TAG, "startService failed, falling back", e)
+                try {
+                    context.startForegroundService(Intent(context, HomeBlockOverlayService::class.java))
+                } catch (e2: Exception) {
+                    android.util.Log.e(TAG, "All start methods failed", e2)
+                }
+            }
         }
 
         fun stop(context: Context) {

@@ -198,8 +198,28 @@ class AppBlockerService : android.app.Service() {
         return lastKnownForegroundApp
     }
 
+    @Volatile private var isQueryingForeground = false
+
     private fun checkForegroundApp() {
-        val pkg = getCurrentForegroundApp() ?: return
+        // Deep scan can freeze the main thread, causing ANRs or foreground service timeouts.
+        // We strictly offload the intensive UsageStats query to a background thread.
+        if (isQueryingForeground) return
+        isQueryingForeground = true
+        Thread {
+            try {
+                val pkg = getCurrentForegroundApp()
+                if (pkg != null) {
+                    handler.post {
+                        processForegroundApp(pkg)
+                    }
+                }
+            } finally {
+                isQueryingForeground = false
+            }
+        }.start()
+    }
+
+    private fun processForegroundApp(pkg: String) {
         if (pkg == packageName) return  // Always allow Reef itself
 
         val now = System.currentTimeMillis()
