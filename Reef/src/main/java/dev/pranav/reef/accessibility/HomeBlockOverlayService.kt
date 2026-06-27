@@ -178,7 +178,7 @@ class HomeBlockOverlayService : Service(), LifecycleOwner, SavedStateRegistryOwn
 
     private fun promoteToForeground() {
         val notification = NotificationCompat.Builder(this, FOCUS_MODE_CHANNEL_ID)
-            .setSmallIcon(R.drawable.hourglass)
+            .setSmallIcon(R.drawable.ic_launcher_foreground)
             .setContentTitle(getString(R.string.focus_mode))
             .setContentText(getString(R.string.home_block_subtitle))
             .setPriority(NotificationCompat.PRIORITY_MIN)

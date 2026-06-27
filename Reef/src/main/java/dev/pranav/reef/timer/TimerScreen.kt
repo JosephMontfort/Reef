@@ -756,19 +756,7 @@ fun RunningTimerView(
                 .fillMaxSize()
                 .padding(start = 24.dp, end = 24.dp, top = 24.dp, bottom = 80.dp),
         ) {
-            // --- ULTRA-PREMIUM 3D HOURGLASS ENGINE ---
-            val maxTimeState = androidx.compose.runtime.remember(state.pomodoroPhase) { 
-                androidx.compose.runtime.mutableLongStateOf(state.timeRemaining.coerceAtLeast(1L)) 
-            }
-            if (state.timeRemaining > maxTimeState.longValue) {
-                maxTimeState.longValue = state.timeRemaining
-            }
-            val progress = (state.timeRemaining.toFloat() / maxTimeState.longValue.toFloat()).coerceIn(0f, 1f)
-
-            PremiumHourglass(
-                progress = progress,
-                isActive = !isPaused && state.isRunning
-            )
+            Spacer(modifier = Modifier.weight(0.5f))
             androidx.compose.foundation.layout.Spacer(modifier = androidx.compose.ui.Modifier.height(32.dp))
             // -----------------------------------------
 

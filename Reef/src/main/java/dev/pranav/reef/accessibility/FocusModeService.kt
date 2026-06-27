@@ -566,7 +566,7 @@ class FocusModeService : Service() {
             )
             notificationBuilder = NotificationCompat.Builder(this, FOCUS_MODE_CHANNEL_ID)
                 .setContentIntent(tapPending)
-                .setSmallIcon(R.drawable.hourglass)
+                .setSmallIcon(R.drawable.ic_launcher_foreground)
                 .setPriority(NotificationCompat.PRIORITY_HIGH)
                 .setOngoing(true)
                 .setOnlyAlertOnce(true)

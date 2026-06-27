@@ -140,7 +140,7 @@ object Whitelist {
         "com.google.android.deskclock",
         "com.google.android.apps.classroom",
         "com.google.android.apps.meet",
-        "com.google.android.gm",
+        "com.google.android.apps.bard",
         "com.microsoft.office.word",
         "com.microsoft.office.excel",
         "com.microsoft.office.powerpoint",
