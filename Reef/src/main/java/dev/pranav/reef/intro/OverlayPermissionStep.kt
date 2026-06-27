@@ -126,7 +126,17 @@ fun OverlayPermissionStep(
                     }
                 } else if (needsOem && !isOemGranted && !oemInteracted) {
                     OutlinedButton(
-                        onClick = { oemIntent?.let { oemLauncher.launch(it) } },
+                        onClick = { 
+                            try {
+                                oemIntent?.let { oemLauncher.launch(it) }
+                            } catch (e: Exception) {
+                                // If it crashes here, the Custom ROM was spoofing the intent existence.
+                                // We automatically bypass the OEM step.
+                                OemOverlayManager.markOemVerified(context, true)
+                                lifecycleTrigger++
+                                onPermissionsFullyGranted()
+                            }
+                        },
                         enabled = timerTicks == 0,
                         border = BorderStroke(1.dp, if (timerTicks == 0) Color.White else Color.White.copy(alpha = 0.4f)),
                         colors = ButtonDefaults.outlinedButtonColors(contentColor = Color.White, disabledContentColor = Color.White.copy(alpha = 0.4f))
