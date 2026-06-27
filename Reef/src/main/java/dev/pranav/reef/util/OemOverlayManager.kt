@@ -42,6 +42,12 @@ object OemOverlayManager {
         for (intent in intents) {
             try {
                 if (intent.resolveActivity(context.packageManager) != null) {
+                    // Check if the OEM package is actually installed.
+                    // This catches Custom ROMs that spoof the intent but don't have the app!
+                    val pkg = intent.component?.packageName
+                    if (pkg != null) {
+                        context.packageManager.getPackageInfo(pkg, 0)
+                    }
                     return intent
                 }
             } catch (_: Exception) {}

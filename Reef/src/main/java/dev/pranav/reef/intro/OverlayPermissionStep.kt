@@ -49,8 +49,8 @@ fun OverlayPermissionStep(
     var timerTicks by remember { mutableIntStateOf(5) }
     var verifyTicks by remember { mutableIntStateOf(3) }
     
-    LaunchedEffect(standardGranted, needsOem, isOemGranted, oemInteracted, isChecking) {
-        if (!isChecking && standardGranted && needsOem && !isOemGranted && !oemInteracted) {
+    LaunchedEffect(standardGranted, needsOem, isOemGranted, oemInteracted) {
+        if (standardGranted && needsOem && !isOemGranted && !oemInteracted) {
             timerTicks = 5
             while (timerTicks > 0) {
                 delay(1000)
