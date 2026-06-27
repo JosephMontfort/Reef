@@ -136,7 +136,7 @@ fun AppIntroScreen() {
                 val accessGranted = remember(resumeTrigger) { context.isAccessibilityServiceEnabledForBlocker() }
                 AnimatedCustomSlide(
                     icon = Icons.Rounded.AccessibilityNew,
-                    title = if (accessGranted) "All Ready!" else stringResource(R.string.accessibility_service),
+                    title = if (accessGranted) "${stringResource(R.string.accessibility_service)} Granted" else stringResource(R.string.accessibility_service),
                     description = if (accessGranted) "✓ ${stringResource(R.string.accessibility_service)} granted. Please click the Next arrow below." else stringResource(R.string.accessibility_service_website_only_description)
                 ) {
                     if (!accessGranted) {
@@ -216,7 +216,7 @@ fun AppIntroScreen() {
                 val hasUsage = remember(resumeTrigger) { context.hasUsageStatsPermission() }
                 AnimatedCustomSlide(
                     icon = Icons.Rounded.QueryStats,
-                    title = if (hasUsage) "All Ready!" else stringResource(R.string.app_usage_statistics),
+                    title = if (hasUsage) "${stringResource(R.string.app_usage_statistics)} Granted" else stringResource(R.string.app_usage_statistics),
                     description = if (hasUsage) "✓ Required permissions granted. Please click the Next arrow below." else stringResource(R.string.app_usage_statistics_description)
                 ) {
                     if (!hasUsage) {
@@ -255,7 +255,7 @@ fun AppIntroScreen() {
                     val hasNotifs = remember(resumeTrigger) { ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED }
                     AnimatedCustomSlide(
                         icon = Icons.Rounded.NotificationsActive,
-                        title = if (hasNotifs) "All Ready!" else stringResource(R.string.notification_permission),
+                        title = if (hasNotifs) "${stringResource(R.string.notification_permission)} Granted" else stringResource(R.string.notification_permission),
                         description = if (hasNotifs) "✓ Required permissions granted. Please click the Next arrow below." else stringResource(R.string.notification_permission_description)
                     ) {
                         if (!hasNotifs) {
@@ -293,7 +293,7 @@ fun AppIntroScreen() {
                 val isIgnoring = remember(resumeTrigger) { powerManager.isIgnoringBatteryOptimizations(context.packageName) }
                 AnimatedCustomSlide(
                     icon = Icons.Rounded.BatteryChargingFull,
-                    title = if (isIgnoring) "All Ready!" else stringResource(R.string.battery_optimization_exception),
+                    title = if (isIgnoring) "${stringResource(R.string.battery_optimization_exception)} Granted" else stringResource(R.string.battery_optimization_exception),
                     description = if (isIgnoring) "✓ Required permissions granted. Please click the Next arrow below." else stringResource(R.string.battery_optimization_exception_description)
                 ) {
                     if (!isIgnoring) {
@@ -331,7 +331,7 @@ fun AppIntroScreen() {
                     val hasDnd = remember(resumeTrigger) { context.hasDndPermission() }
                     AnimatedCustomSlide(
                         icon = Icons.Rounded.DoNotDisturbOn,
-                        title = if (hasDnd) "All Ready!" else stringResource(R.string.do_not_disturb_permission),
+                        title = if (hasDnd) "${stringResource(R.string.do_not_disturb_permission)} Granted" else stringResource(R.string.do_not_disturb_permission),
                         description = if (hasDnd) "✓ Required permissions granted. Please click the Next arrow below." else stringResource(R.string.do_not_disturb_permission_description)
                     ) {
                         if (!hasDnd) {
