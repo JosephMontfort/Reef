@@ -1,6 +1,7 @@
 package dev.pranav.reef.util
 
 import android.app.Activity
+import android.content.Context
 import android.app.AlertDialog
 import android.content.ActivityNotFoundException
 import android.content.ComponentName

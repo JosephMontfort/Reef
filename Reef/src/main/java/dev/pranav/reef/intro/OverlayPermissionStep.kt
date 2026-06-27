@@ -78,9 +78,7 @@ fun OverlayPermissionStep(
         lifecycleTrigger++
     }
 
-    val exactPermissionName = remember {
-        ""Display pop-up windows while running in the background" or "Floating Windows""
-    }
+    val exactPermissionName = "'Display pop-up windows while running in the background' or 'Floating Windows'"
 
     val title: String
     val desc: String
