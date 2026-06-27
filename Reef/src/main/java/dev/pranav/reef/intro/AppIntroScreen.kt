@@ -99,6 +99,21 @@ fun AppIntroScreen() {
     val alarmManager =
         context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
 
+    val lifecycleOwner = androidx.lifecycle.compose.LocalLifecycleOwner.current
+    var resumeTrigger by remember { androidx.compose.runtime.mutableIntStateOf(0) }
+    
+    androidx.compose.runtime.DisposableEffect(lifecycleOwner) {
+        val observer = androidx.lifecycle.LifecycleEventObserver { _, event ->
+            if (event == androidx.lifecycle.Lifecycle.Event.ON_RESUME) {
+                resumeTrigger++ // This forces UI elements observing it to re-check instantly
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose {
+            lifecycleOwner.lifecycle.removeObserver(observer)
+        }
+    }
+
     val pages = listOfNotNull(
         // 1. Welcome Slide
         IntroPage(
@@ -110,9 +125,7 @@ fun AppIntroScreen() {
             onNext = { true }
         ),
 
-        // 2. Accessibility Service — OPTIONAL, only required for website blocking.
-        // App blocking via UsageStats works without it. Users can grant it later from the
-        // Website Blocklist screen when they first try to use website limits.
+        // 2. Accessibility Service (Optional)
         IntroPage(
             title = "",
             description = "",
@@ -120,12 +133,12 @@ fun AppIntroScreen() {
             contentColor = Color.White,
             onNext = { true },
             customContent = {
+                val accessGranted = remember(resumeTrigger) { context.isAccessibilityServiceEnabledForBlocker() }
                 AnimatedCustomSlide(
                     icon = Icons.Rounded.AccessibilityNew,
-                    title = stringResource(R.string.accessibility_service),
-                    description = stringResource(R.string.accessibility_service_website_only_description)
+                    title = if (accessGranted) "All Ready!" else stringResource(R.string.accessibility_service),
+                    description = if (accessGranted) "✓ ${stringResource(R.string.accessibility_service)} granted. Please click the Next arrow below." else stringResource(R.string.accessibility_service_website_only_description)
                 ) {
-                    val accessGranted = context.isAccessibilityServiceEnabledForBlocker()
                     if (!accessGranted) {
                         OutlinedButton(
                             onClick = { activity?.showAccessibilityDialog() },
@@ -134,18 +147,12 @@ fun AppIntroScreen() {
                         ) {
                             Text(stringResource(R.string.grant_optional))
                         }
-                    } else {
-                        Text(
-                            text = "✓ ${stringResource(R.string.accessibility_service)} granted",
-                            color = Color.White,
-                            style = MaterialTheme.typography.bodyMedium
-                        )
                     }
                 }
             }
         ),
 
-        // 3. Display Over Other Apps — MANDATORY (Multi-Step OEM Flow)
+        // 3. Display Over Other Apps
         IntroPage(
             title = "",
             description = "",
@@ -169,7 +176,7 @@ fun AppIntroScreen() {
             }
         ),
 
-        // 4. Autostart — MANDATORY on Chinese OEMs, auto-passes on stock Android
+        // 4. Autostart
         if (!context.doesNotNeedAutostartGrant()) {
             IntroPage(
                 title = "",
@@ -195,83 +202,151 @@ fun AppIntroScreen() {
 
         // 5. Usage Statistics
         IntroPage(
-            title = stringResource(R.string.app_usage_statistics),
-            description = stringResource(R.string.app_usage_statistics_description),
-            icon = Icons.Rounded.QueryStats,
+            title = "",
+            description = "",
             backgroundColor = Color(0xFF536DFE),
             contentColor = Color.White,
             onNext = {
                 if (!context.hasUsageStatsPermission()) {
-                    activity?.showUsageAccessDialog {
-                        val intent = Intent(Settings.ACTION_USAGE_ACCESS_SETTINGS)
-                        context.startActivity(intent)
-                    }
+                    android.widget.Toast.makeText(context, "Please grant Usage Statistics permission to proceed", android.widget.Toast.LENGTH_SHORT).show()
                     false
                 } else true
+            },
+            customContent = {
+                val hasUsage = remember(resumeTrigger) { context.hasUsageStatsPermission() }
+                AnimatedCustomSlide(
+                    icon = Icons.Rounded.QueryStats,
+                    title = if (hasUsage) "All Ready!" else stringResource(R.string.app_usage_statistics),
+                    description = if (hasUsage) "✓ Required permissions granted. Please click the Next arrow below." else stringResource(R.string.app_usage_statistics_description)
+                ) {
+                    if (!hasUsage) {
+                        OutlinedButton(
+                            onClick = { 
+                                activity?.showUsageAccessDialog {
+                                    val intent = Intent(Settings.ACTION_USAGE_ACCESS_SETTINGS)
+                                    context.startActivity(intent)
+                                }
+                            },
+                            border = BorderStroke(1.dp, Color.White),
+                            colors = ButtonDefaults.outlinedButtonColors(contentColor = Color.White)
+                        ) {
+                            Text("Grant Permission")
+                        }
+                    }
+                }
             }
         ),
 
-        // 6. Notification Permission (Android 13+)
+        // 6. Notification Permission
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             IntroPage(
-                title = stringResource(R.string.notification_permission),
-                description = stringResource(R.string.notification_permission_description),
-                icon = Icons.Rounded.NotificationsActive,
+                title = "",
+                description = "",
                 backgroundColor = Color(0xFFF19C32),
                 contentColor = Color.White,
                 onNext = {
-                    val granted = ContextCompat.checkSelfPermission(
-                        context, Manifest.permission.POST_NOTIFICATIONS
-                    ) == PackageManager.PERMISSION_GRANTED
-
+                    val granted = ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED
                     if (!granted) {
-                        requestPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+                        android.widget.Toast.makeText(context, "Please grant Notification permission to proceed", android.widget.Toast.LENGTH_SHORT).show()
                         false
                     } else true
+                },
+                customContent = {
+                    val hasNotifs = remember(resumeTrigger) { ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED }
+                    AnimatedCustomSlide(
+                        icon = Icons.Rounded.NotificationsActive,
+                        title = if (hasNotifs) "All Ready!" else stringResource(R.string.notification_permission),
+                        description = if (hasNotifs) "✓ Required permissions granted. Please click the Next arrow below." else stringResource(R.string.notification_permission_description)
+                    ) {
+                        if (!hasNotifs) {
+                            OutlinedButton(
+                                onClick = { requestPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS) },
+                                border = BorderStroke(1.dp, Color.White),
+                                colors = ButtonDefaults.outlinedButtonColors(contentColor = Color.White)
+                            ) {
+                                Text("Grant Permission")
+                            }
+                        }
+                    }
                 }
             )
         } else null,
 
         // 7. Battery Optimization
         IntroPage(
-            title = stringResource(R.string.battery_optimization_exception),
-            description = stringResource(R.string.battery_optimization_exception_description),
-            icon = Icons.Rounded.BatteryChargingFull,
+            title = "",
+            description = "",
             backgroundColor = Color(0xFF00BFA5),
             contentColor = Color.White,
             onNext = {
                 val isIgnoring = powerManager.isIgnoringBatteryOptimizations(context.packageName)
                 if (!isIgnoring) {
-                    val intent =
-                        Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS).apply {
-                            data = "package:${context.packageName}".toUri()
-                        }
-                    context.startActivity(intent)
+                    android.widget.Toast.makeText(context, "Please disable battery optimization to proceed", android.widget.Toast.LENGTH_SHORT).show()
                     false
                 } else {
                     Routines.saveAll(Routines.createDefaults(), context)
                     prefs.edit { putBoolean("first_run", false) }
                     true
                 }
+            },
+            customContent = {
+                val isIgnoring = remember(resumeTrigger) { powerManager.isIgnoringBatteryOptimizations(context.packageName) }
+                AnimatedCustomSlide(
+                    icon = Icons.Rounded.BatteryChargingFull,
+                    title = if (isIgnoring) "All Ready!" else stringResource(R.string.battery_optimization_exception),
+                    description = if (isIgnoring) "✓ Required permissions granted. Please click the Next arrow below." else stringResource(R.string.battery_optimization_exception_description)
+                ) {
+                    if (!isIgnoring) {
+                        OutlinedButton(
+                            onClick = { 
+                                val intent = Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS).apply {
+                                    data = "package:${context.packageName}".toUri()
+                                }
+                                context.startActivity(intent)
+                            },
+                            border = BorderStroke(1.dp, Color.White),
+                            colors = ButtonDefaults.outlinedButtonColors(contentColor = Color.White)
+                        ) {
+                            Text("Grant Permission")
+                        }
+                    }
+                }
             }
         ),
 
-        // 8. Do Not Disturb Permission (Android 13+)
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU && !context.hasDndPermission()) {
+        // 8. Do Not Disturb
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             IntroPage(
-                title = stringResource(R.string.do_not_disturb_permission),
-                description = stringResource(R.string.do_not_disturb_permission_description),
-                icon = Icons.Rounded.DoNotDisturbOn,
+                title = "",
+                description = "",
                 backgroundColor = Color(0xFF8968D5),
                 contentColor = Color.White,
                 onNext = {
                     if (!context.hasDndPermission()) {
-                        val intent =
-                            Intent(Settings.ACTION_NOTIFICATION_POLICY_ACCESS_SETTINGS)
-                        context.startActivity(intent)
-
+                        android.widget.Toast.makeText(context, "Please grant Do Not Disturb permission to proceed", android.widget.Toast.LENGTH_SHORT).show()
                         false
                     } else true
+                },
+                customContent = {
+                    val hasDnd = remember(resumeTrigger) { context.hasDndPermission() }
+                    AnimatedCustomSlide(
+                        icon = Icons.Rounded.DoNotDisturbOn,
+                        title = if (hasDnd) "All Ready!" else stringResource(R.string.do_not_disturb_permission),
+                        description = if (hasDnd) "✓ Required permissions granted. Please click the Next arrow below." else stringResource(R.string.do_not_disturb_permission_description)
+                    ) {
+                        if (!hasDnd) {
+                            OutlinedButton(
+                                onClick = { 
+                                    val intent = Intent(Settings.ACTION_NOTIFICATION_POLICY_ACCESS_SETTINGS)
+                                    context.startActivity(intent)
+                                },
+                                border = BorderStroke(1.dp, Color.White),
+                                colors = ButtonDefaults.outlinedButtonColors(contentColor = Color.White)
+                            ) {
+                                Text("Grant Permission")
+                            }
+                        }
+                    }
                 }
             )
         } else null
