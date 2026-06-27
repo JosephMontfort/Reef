@@ -170,7 +170,7 @@ fun AppIntroScreen() {
         ),
 
         // 4. Autostart — MANDATORY on Chinese OEMs, auto-passes on stock Android
-        if (!doesNotNeedAutostartGrant()) {
+        if (!context.doesNotNeedAutostartGrant()) {
             IntroPage(
                 title = "",
                 description = "",

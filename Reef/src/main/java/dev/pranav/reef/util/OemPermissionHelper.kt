@@ -117,7 +117,20 @@ fun Activity.requestOverlayPermission(onDone: (() -> Unit)? = null) {
  * Returns true if this device does NOT need a special autostart grant —
  * i.e. stock Android (Pixel, Samsung, Motorola) where BOOT_COMPLETED fires reliably.
  */
-fun doesNotNeedAutostartGrant() = !isChineseOem()
+fun Context.doesNotNeedAutostartGrant(): Boolean {
+    val intents = listOf(
+        buildIntent("com.miui.securitycenter", "com.miui.permcenter.autostart.AutoStartManagementActivity"),
+        buildIntent("com.coloros.safecenter", "com.coloros.safecenter.startupapp.StartupAppListActivity"),
+        buildIntent("com.oplus.safecenter", "com.oplus.safecenter.startupapp.StartupAppListActivity"),
+        buildIntent("com.vivo.permissionmanager", "com.vivo.permissionmanager.activity.BgStartUpManagerActivity"),
+        buildIntent("com.huawei.systemmanager", "com.huawei.systemmanager.startupmgr.ui.StartupNormalAppListActivity"),
+        buildIntent("com.huawei.systemmanager", "com.huawei.systemmanager.appcontrol.activity.StartupAppControlActivity")
+    )
+    for (intent in intents) {
+        if (isIntentResolvable(intent)) return false
+    }
+    return true
+}
 
 /**
  * Show the OEM autostart manager. Call only on Chinese OEM devices.
@@ -257,7 +270,7 @@ private fun buildIntent(
     extras.forEach { (k, v) -> putExtra(k, v) }
 }
 
-private fun Activity.isIntentResolvable(intent: Intent): Boolean {
+fun Context.isIntentResolvable(intent: Intent): Boolean {
     return try {
         packageManager.resolveActivity(
             intent, PackageManager.MATCH_DEFAULT_ONLY
