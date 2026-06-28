@@ -46,7 +46,7 @@ import androidx.navigation.NavController
 import androidx.navigation.compose.rememberNavController
 import dev.pranav.reef.R
 import dev.pranav.reef.navigation.Screen
-import dev.pranav.reef.ui.Typography.DMSerif
+import dev.pranav.reef.ui.Typography.androidx.compose.ui.text.font.FontFamily.Default
 import dev.pranav.reef.util.WatchdogManager
 import dev.pranav.reef.util.WhitelistAppCache
 import dev.pranav.reef.util.prefs

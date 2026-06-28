@@ -246,7 +246,7 @@ private fun FocusModeCard(
                     fontWeight = FontWeight.Bold
                 ),
                 color = MaterialTheme.colorScheme.onPrimaryContainer,
-                fontFamily = Typography.DMSerif
+                fontFamily = Typography.androidx.compose.ui.text.font.FontFamily.Default
             )
 
             Spacer(Modifier.height(8.dp))
@@ -420,7 +420,7 @@ private fun AppUsageCard(
                     style = MaterialTheme.typography.titleLarge.copy(
                         fontWeight = FontWeight.Bold
                     ),
-                    fontFamily = Typography.DMSerif,
+                    fontFamily = Typography.androidx.compose.ui.text.font.FontFamily.Default,
                     color = MaterialTheme.colorScheme.onSecondaryContainer
                 )
                 Text(
@@ -476,7 +476,7 @@ private fun TimeLimitsCard(
                     style = MaterialTheme.typography.titleLarge.copy(
                         fontWeight = FontWeight.Bold
                     ),
-                    fontFamily = Typography.DMSerif,
+                    fontFamily = Typography.androidx.compose.ui.text.font.FontFamily.Default,
                     color = MaterialTheme.colorScheme.onTertiaryContainer
                 )
                 Text(
