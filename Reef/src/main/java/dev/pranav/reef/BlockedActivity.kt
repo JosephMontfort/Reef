@@ -169,9 +169,12 @@ fun HomeBlockScreen(onLaunchApp: (Intent) -> Unit) {
                 .padding(horizontal = 16.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            Spacer(Modifier.height(20.dp))
-            FocusTimerDisplay(size = 260.dp)
-            Spacer(Modifier.height(28.dp))
+            Box(
+                modifier = Modifier.weight(1.2f),
+                contentAlignment = Alignment.Center
+            ) {
+                FocusTimerDisplay(size = 260.dp)
+            }
             HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
             Spacer(Modifier.height(16.dp))
             Text(
@@ -186,7 +189,7 @@ fun HomeBlockScreen(onLaunchApp: (Intent) -> Unit) {
                 columns = GridCells.Fixed(4),
                 verticalArrangement = Arrangement.spacedBy(12.dp),
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
-                modifier = Modifier.fillMaxSize()
+                modifier = Modifier.weight(1f)
             ) {
                 items(allowedApps, key = { it.packageName }) { app ->
                     AllowedAppItem(app = app) {

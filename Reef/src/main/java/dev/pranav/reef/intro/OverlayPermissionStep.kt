@@ -49,6 +49,7 @@ fun OverlayPermissionStep(
     
     var timerTicks by remember { mutableIntStateOf(5) }
     var verifyTicks by remember { mutableIntStateOf(3) }
+    var showOverlayDialog by remember { mutableStateOf(false) }
     var hasTimerRun by remember { mutableStateOf(false) }
     
     LaunchedEffect(standardGranted, needsOem, isOemGranted, oemInteracted) {
@@ -125,7 +126,7 @@ fun OverlayPermissionStep(
                     CircularProgressIndicator(color = Color.White)
                 } else if (!standardGranted) {
                     OutlinedButton(
-                        onClick = { standardLauncher.launch(Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:${context.packageName}"))) },
+                        onClick = { showOverlayDialog = true },
                         border = BorderStroke(1.dp, Color.White),
                         colors = ButtonDefaults.outlinedButtonColors(contentColor = Color.White)
                     ) {
@@ -270,6 +271,22 @@ fun AnimatedCustomSlide(
                 Spacer(modifier = Modifier.height(24.dp))
                 content()
             }
-        }
+                }
+    }
+    if (showOverlayDialog) {
+        AlertDialog(
+            onDismissRequest = { showOverlayDialog = false },
+            title = { Text(androidx.compose.ui.res.stringResource(dev.pranav.reef.R.string.overlay_permission)) },
+            text = { Text(androidx.compose.ui.res.stringResource(dev.pranav.reef.R.string.overlay_permission_description)) },
+            confirmButton = {
+                TextButton(onClick = {
+                    showOverlayDialog = false
+                    standardLauncher.launch(Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:${context.packageName}")))
+                }) { Text(androidx.compose.ui.res.stringResource(dev.pranav.reef.R.string.agree)) }
+            },
+            dismissButton = {
+                TextButton(onClick = { showOverlayDialog = false }) { Text(androidx.compose.ui.res.stringResource(dev.pranav.reef.R.string.cancel)) }
+            }
+        )
     }
 }

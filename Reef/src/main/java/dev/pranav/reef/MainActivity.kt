@@ -170,28 +170,19 @@ class MainActivity: ComponentActivity() {
 
             LaunchedEffect(Unit) {
                 kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
-                    val todayUsage = ScreenUsageHelper.fetchAppUsageTodayTillNow(usageStatsManager)
-                    val totalUsageMinutes = todayUsage.values.sum() / 60
-                    val hours = totalUsageMinutes / 60
-                    val minutes = totalUsageMinutes % 60
-                    val usageText = when {
-                        hours > 0 && minutes > 0 -> getString(
-                            R.string.hour_min_short_suffix,
-                            hours,
-                            minutes
-                        ) + " " + getString(R.string.today)
-
-                        hours > 0 -> getString(
-                            R.string.hours_short_format,
-                            hours
-                        ) + " " + getString(R.string.today)
-
-                        minutes > 0 -> getString(
-                            R.string.minutes_short_format,
-                            minutes
-                        ) + " " + getString(R.string.today)
-
-                        else -> getString(R.string.less_than_one_minute)
+                    val usageText = try {
+                        val todayUsage = ScreenUsageHelper.fetchAppUsageTodayTillNow(usageStatsManager)
+                        val totalUsageMinutes = todayUsage.values.sum() / 60
+                        val hours = totalUsageMinutes / 60
+                        val minutes = totalUsageMinutes % 60
+                        when {
+                            hours > 0 && minutes > 0 -> getString(R.string.hour_min_short_suffix, hours, minutes) + " " + getString(R.string.today)
+                            hours > 0 -> getString(R.string.hours_short_format, hours) + " " + getString(R.string.today)
+                            minutes > 0 -> getString(R.string.minutes_short_format, minutes) + " " + getString(R.string.today)
+                            else -> getString(R.string.less_than_one_minute)
+                        }
+                    } catch (e: Exception) {
+                        "0m today"
                     }
                     kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
                         dailyUsageText = usageText
@@ -554,9 +545,14 @@ class MainActivity: ComponentActivity() {
 
     override fun onResume() {
         super.onResume()
-        if (!hasCheckedPermissions && !prefs.getBoolean("first_run", true)) {
-            hasCheckedPermissions = true
-            checkAndRequestMissingPermissions()
+        if (!prefs.getBoolean("first_run", true)) {
+            val missingPermissions = checkAllPermissions().filter { !it.isGranted && !it.isOptional }
+            if (missingPermissions.isNotEmpty()) {
+                startActivity(Intent(this, dev.pranav.reef.intro.AppIntroActivity::class.java).apply {
+                    flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
+                })
+                return
+            }
         }
     }
 
