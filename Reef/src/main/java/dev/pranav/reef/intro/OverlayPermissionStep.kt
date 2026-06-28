@@ -198,3 +198,97 @@ fun OverlayPermissionStep(
         }
     }
 }
+
+@Composable
+fun AnimatedCustomSlide(
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    title: String,
+    description: String,
+    content: @Composable () -> Unit
+) {
+    val contentVisible = remember { androidx.compose.animation.core.MutableTransitionState(false) }
+    androidx.compose.runtime.LaunchedEffect(Unit) { contentVisible.targetState = true }
+
+    Column(
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center,
+        modifier = Modifier.fillMaxSize().padding(bottom = 80.dp)
+    ) {
+        androidx.compose.animation.AnimatedVisibility(
+            visibleState = contentVisible,
+            enter = androidx.compose.animation.fadeIn(androidx.compose.animation.core.tween(300)) +
+                    androidx.compose.animation.scaleIn(
+                        animationSpec = androidx.compose.animation.core.spring(
+                            dampingRatio = androidx.compose.animation.core.Spring.DampingRatioMediumBouncy,
+                            stiffness = androidx.compose.animation.core.Spring.StiffnessLow
+                        ),
+                        initialScale = 0.8f
+                    )
+        ) {
+            Surface(
+                modifier = Modifier.size(140.dp).clip(androidx.compose.foundation.shape.CircleShape),
+                shape = androidx.compose.foundation.shape.CircleShape,
+                color = Color.White.copy(alpha = 0.15f)
+            ) {
+                Icon(
+                    imageVector = icon,
+                    contentDescription = null,
+                    tint = Color.White,
+                    modifier = Modifier.padding(32.dp).size(76.dp)
+                )
+            }
+        }
+
+        Spacer(modifier = Modifier.height(40.dp))
+
+        androidx.compose.animation.AnimatedVisibility(
+            visibleState = contentVisible,
+            enter = androidx.compose.animation.fadeIn(androidx.compose.animation.core.tween(300, delayMillis = 100)) +
+                    androidx.compose.animation.slideInVertically(
+                        animationSpec = androidx.compose.animation.core.spring(
+                            dampingRatio = androidx.compose.animation.core.Spring.DampingRatioMediumBouncy,
+                            stiffness = androidx.compose.animation.core.Spring.StiffnessLow
+                        ),
+                        initialOffsetY = { it / 3 }
+                    )
+        ) {
+            Text(
+                text = title,
+                style = MaterialTheme.typography.headlineMedium,
+                fontWeight = androidx.compose.ui.text.font.FontWeight.Bold,
+                color = Color.White,
+                textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                modifier = Modifier.fillMaxWidth()
+            )
+        }
+
+        Spacer(modifier = Modifier.height(16.dp))
+
+        androidx.compose.animation.AnimatedVisibility(
+            visibleState = contentVisible,
+            enter = androidx.compose.animation.fadeIn(androidx.compose.animation.core.tween(300, delayMillis = 200)) +
+                    androidx.compose.animation.slideInVertically(
+                        animationSpec = androidx.compose.animation.core.spring(
+                            dampingRatio = androidx.compose.animation.core.Spring.DampingRatioMediumBouncy,
+                            stiffness = androidx.compose.animation.core.Spring.StiffnessLow
+                        ),
+                        initialOffsetY = { it / 4 }
+                    )
+        ) {
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally,
+                modifier = Modifier.fillMaxWidth(0.9f)
+            ) {
+                Text(
+                    text = description,
+                    style = MaterialTheme.typography.bodyLarge,
+                    color = Color.White.copy(alpha = 0.8f),
+                    textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                )
+                Spacer(modifier = Modifier.height(24.dp))
+                content()
+            }
+        }
+    }
+}
+
