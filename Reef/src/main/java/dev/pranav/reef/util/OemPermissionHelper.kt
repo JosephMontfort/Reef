@@ -175,7 +175,17 @@ fun Activity.requestAutostartPermission(onDone: (() -> Unit)? = null) {
         OemFamily.STOCK -> { onDone?.invoke(); return }
     }
 
-    showAutostartDialog(instructions, primaryIntent, fallbackIntent, onDone)
+    val launched = trySafeStartActivity(primaryIntent)
+    if (!launched) {
+        val launchedFallback = fallbackIntent != null && trySafeStartActivity(fallbackIntent)
+        if (!launchedFallback) {
+            safeStartActivity(
+                Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
+                    data = Uri.parse("package:$packageName")
+                }, onDone
+            )
+        }
+    }
 }
 
 // ──────────────────────────────────────────────────────────────────────────────

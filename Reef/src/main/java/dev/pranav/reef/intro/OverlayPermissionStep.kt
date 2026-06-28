@@ -49,13 +49,19 @@ fun OverlayPermissionStep(
     
     var timerTicks by remember { mutableIntStateOf(5) }
     var verifyTicks by remember { mutableIntStateOf(3) }
+    var hasTimerRun by remember { mutableStateOf(false) }
     
     LaunchedEffect(standardGranted, needsOem, isOemGranted, oemInteracted) {
         if (standardGranted && needsOem && !isOemGranted && !oemInteracted) {
-            timerTicks = 5
-            while (timerTicks > 0) {
-                delay(1000)
-                timerTicks--
+            if (!hasTimerRun) {
+                timerTicks = 5
+                while (timerTicks > 0) {
+                    delay(1000)
+                    timerTicks--
+                }
+                hasTimerRun = true
+            } else {
+                timerTicks = 0
             }
         }
     }
@@ -79,7 +85,7 @@ fun OverlayPermissionStep(
         lifecycleTrigger++
     }
 
-    val exactPermissionName = "'Display pop-up windows while running in the background' or 'Floating Windows'"
+    val exactPermissionName = "\n\n➡️ [ DISPLAY POP-UP WINDOWS WHILE RUNNING IN THE BACKGROUND ] ⬅️\n\nor\n\n➡️ [ FLOATING WINDOWS ] ⬅️\n"
 
     val title: String
     val desc: String

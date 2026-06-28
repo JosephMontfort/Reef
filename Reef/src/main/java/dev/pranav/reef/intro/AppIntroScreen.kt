@@ -80,6 +80,20 @@ fun AppIntroScreen() {
     var showBatteryDialog by remember { mutableStateOf(false) }
     var showDndDialog by remember { mutableStateOf(false) }
 
+    var autostartVerified by remember { mutableStateOf(false) }
+    var autostartInteracted by remember { mutableStateOf(false) }
+    var autostartVerifyTicks by remember { mutableIntStateOf(3) }
+    
+    LaunchedEffect(autostartInteracted, autostartVerified, resumeTrigger) {
+        if (autostartInteracted && !autostartVerified) {
+            autostartVerifyTicks = 3
+            while (autostartVerifyTicks > 0) {
+                kotlinx.coroutines.delay(1000)
+                autostartVerifyTicks--
+            }
+        }
+    }
+
     val pages = mutableListOf<IntroPage>()
 
     // 1. Welcome Slide
@@ -135,29 +149,43 @@ fun AppIntroScreen() {
     )
 
     // 4. Autostart (MANDATORY IF REQUIRED)
-    if (!context.doesNotNeedAutostartGrant()) {
+    val needsAutostart = remember { !context.doesNotNeedAutostartGrant() }
+    if (needsAutostart) {
         pages.add(
             IntroPage(
                 title = "", description = "", backgroundColor = Color(0xFF1B5E20), contentColor = Color.White,
                 onNext = { 
-                    if (!context.doesNotNeedAutostartGrant()) {
-                        Toast.makeText(context, "Please grant Autostart permission", Toast.LENGTH_SHORT).show()
+                    if (!autostartVerified) {
+                        Toast.makeText(context, "Please complete Autostart permission setup", Toast.LENGTH_SHORT).show()
                         false
                     } else true
                 },
                 customContent = {
-                    val autoGranted = remember(resumeTrigger) { context.doesNotNeedAutostartGrant() }
                     AnimatedCustomSlide(
                         icon = Icons.Rounded.RestartAlt,
-                        title = if (autoGranted) "Autostart Granted" else stringResource(R.string.autostart_permission),
-                        description = if (autoGranted) "✓ Required permissions granted. Please click the Next arrow below." else stringResource(R.string.autostart_permission_description)
+                        title = if (autostartVerified) "Autostart Configured" else if (autostartInteracted) "Did you grant it?" else stringResource(R.string.autostart_permission),
+                        description = if (autostartVerified) "✓ Autostart verified. Please click the Next arrow below." else if (autostartInteracted) "Did you successfully find and enable Autostart/Auto-launch?" else stringResource(R.string.autostart_permission_description)
                     ) {
-                        if (!autoGranted) {
+                        if (!autostartVerified && !autostartInteracted) {
                             OutlinedButton(
                                 onClick = { showAutostartDialog = true },
                                 border = BorderStroke(1.dp, Color.White),
                                 colors = ButtonDefaults.outlinedButtonColors(contentColor = Color.White)
                             ) { Text("Grant Permission") }
+                        } else if (!autostartVerified && autostartInteracted) {
+                            Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                                OutlinedButton(
+                                    onClick = { autostartInteracted = false },
+                                    border = BorderStroke(1.dp, Color.White),
+                                    colors = ButtonDefaults.outlinedButtonColors(contentColor = Color.White)
+                                ) { Text("No, try again") }
+                                OutlinedButton(
+                                    onClick = { autostartVerified = true },
+                                    enabled = autostartVerifyTicks == 0,
+                                    border = BorderStroke(1.dp, if (autostartVerifyTicks == 0) Color.White else Color.White.copy(alpha = 0.4f)),
+                                    colors = ButtonDefaults.outlinedButtonColors(contentColor = Color.White, disabledContentColor = Color.White.copy(alpha = 0.4f))
+                                ) { Text(if (autostartVerifyTicks > 0) "Yes, I enabled it ($autostartVerifyTicks)" else "Yes, I enabled it") }
+                            }
                         }
                     }
                 }
@@ -327,6 +355,7 @@ fun AppIntroScreen() {
             confirmButton = {
                 TextButton(onClick = {
                     showAutostartDialog = false
+                    autostartInteracted = true
                     activity?.requestAutostartPermission()
                 }) { Text(stringResource(R.string.agree)) }
             },
