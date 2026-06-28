@@ -19,7 +19,7 @@
     <string name="notification_permission_dialog">Reef needs this permission to alert you when a focus session starts, ends, or when an app limit is reached.</string>
     <string name="battery_optimization_exception">Battery Optimization Exception</string>
     <string name="battery_optimization_exception_description">Prevents your device from killing Reef in the background so routines run smoothly.</string>
-    <string name="battery_optimization_dialog">Android restricts background apps. Granting this exception ensures your timers and app blockers aren&apos;t abruptly interrupted by the system.</string>
+    <string name="battery_optimization_dialog">Android restricts background apps. Granting this exception ensures your timers and app blockers aren\'t abruptly interrupted by the system.</string>
     <string name="exact_alarm_permission">Schedule Exact Alarms</string>
     <string name="exact_alarm_permission_description">Allow Reef to schedule exact alarms for routines. This ensures your app blocking routines start and stop at the exact times you set.</string>
     <string name="do_not_disturb_permission">Do Not Disturb Permission</string>
@@ -338,10 +338,10 @@
     <string name="overlay_permission_description">Allows Reef to show a blocking screen over other apps during focus sessions. Required for app blocking to work reliably.</string>
     <string name="autostart_permission">Autostart Permission</string>
     <string name="autostart_permission_description">Allows Reef to start automatically when your phone turns on.</string>
-    <string name="autostart_dialog">Without Autostart, your scheduled routines and app limits won&apos;t activate after you restart your device.</string>
+    <string name="autostart_dialog">Without Autostart, your scheduled routines and app limits won\'t activate after you restart your device.</string>
     <string name="grant_optional">Grant (Optional)</string>
     <string name="accessibility_service_website_only_description">Required only if you want to block specific distracting websites in your browser.</string>
-    <string name="accessibility_dialog">Accessibility is used to read the URLs of websites you visit so Reef can block the ones you&apos;ve restricted. No personal data is collected or stored.</string>
+    <string name="accessibility_dialog">Accessibility is used to read the URLs of websites you visit so Reef can block the ones you\'ve restricted. No personal data is collected or stored.</string>
     <string name="pomodoro_notifications_section">Pomodoro Notifications</string>
     <string name="distraction_blocked">Distraction Blocked</string>
     <string name="you_were_using">You were using %1$s</string>
