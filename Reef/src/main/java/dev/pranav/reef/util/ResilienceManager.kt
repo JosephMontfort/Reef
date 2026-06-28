@@ -39,7 +39,7 @@ object ResilienceManager {
         val triggerAt = System.currentTimeMillis() + INTERVAL_MS
         try {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M)
-                am.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, triggerAt, pi)
+                am.setAlarmClock(android.app.AlarmManager.AlarmClockInfo(triggerAt, pi), pi)
             else
                 am.setExact(AlarmManager.RTC_WAKEUP, triggerAt, pi)
             sp(context).edit().putBoolean(PREF_RUNNING, true).apply()
