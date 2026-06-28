@@ -31,7 +31,7 @@ jobs:
         uses: gradle/actions/setup-gradle@v4
 
       - name: Build Release APK
-        run: ./gradlew clean assembleRelease
+        run: ./gradlew clean assembleRelease --stacktrace --info --console=plain
 
       - name: Get next version number
         id: version
