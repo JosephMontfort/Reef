@@ -306,7 +306,7 @@ fun AppIntroScreen() {
         AlertDialog(
             onDismissRequest = { showAccessibilityDialog = false },
             title = { Text(stringResource(R.string.accessibility_service)) },
-            text = { Text(stringResource(R.string.accessibility_service_website_only_description)) },
+            text = { Text(stringResource(R.string.accessibility_dialog)) },
             confirmButton = {
                 TextButton(onClick = {
                     showAccessibilityDialog = false
@@ -323,7 +323,7 @@ fun AppIntroScreen() {
         AlertDialog(
             onDismissRequest = { showAutostartDialog = false },
             title = { Text(stringResource(R.string.autostart_permission)) },
-            text = { Text(stringResource(R.string.autostart_permission_description)) },
+            text = { Text(stringResource(R.string.autostart_dialog)) },
             confirmButton = {
                 TextButton(onClick = {
                     showAutostartDialog = false
@@ -357,7 +357,7 @@ fun AppIntroScreen() {
         AlertDialog(
             onDismissRequest = { showNotificationDialog = false },
             title = { Text(stringResource(R.string.notification_permission)) },
-            text = { Text(stringResource(R.string.notification_permission_description)) },
+            text = { Text(stringResource(R.string.notification_permission_dialog)) },
             confirmButton = {
                 TextButton(onClick = {
                     showNotificationDialog = false
@@ -374,7 +374,7 @@ fun AppIntroScreen() {
         AlertDialog(
             onDismissRequest = { showBatteryDialog = false },
             title = { Text(stringResource(R.string.battery_optimization_exception)) },
-            text = { Text(stringResource(R.string.battery_optimization_exception_description)) },
+            text = { Text(stringResource(R.string.battery_optimization_dialog)) },
             confirmButton = {
                 TextButton(onClick = {
                     showBatteryDialog = false
@@ -394,7 +394,7 @@ fun AppIntroScreen() {
         AlertDialog(
             onDismissRequest = { showDndDialog = false },
             title = { Text(stringResource(R.string.do_not_disturb_permission)) },
-            text = { Text(stringResource(R.string.do_not_disturb_permission_description)) },
+            text = { Text(stringResource(R.string.do_not_disturb_dialog)) },
             confirmButton = {
                 TextButton(onClick = {
                     showDndDialog = false
