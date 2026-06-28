@@ -102,7 +102,7 @@ fun OverlayPermissionStep(
         desc = "Did you successfully find and enable $exactPermissionName?"
         currentIcon = Icons.Rounded.Layers
     } else {
-        title = "All Ready!"
+        title = "Overlay Configured!"
         desc = "✓ Required permissions granted. Please click the Next arrow below."
         currentIcon = Icons.Rounded.Layers
         LaunchedEffect(Unit) { onPermissionsFullyGranted() }
