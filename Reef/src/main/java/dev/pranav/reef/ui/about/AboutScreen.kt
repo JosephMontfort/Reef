@@ -30,7 +30,6 @@ import androidx.compose.ui.unit.dp
 import androidx.core.net.toUri
 import dev.pranav.reef.BuildConfig
 import dev.pranav.reef.R
-import dev.pranav.reef.ui.Typography.androidx.compose.ui.text.font.FontFamily.Default
 import dev.pranav.reef.ui.icons.Discord
 
 @OptIn(ExperimentalMaterial3Api::class)
