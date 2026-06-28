@@ -122,8 +122,7 @@ fun AppInfoCard() {
                 text = stringResource(R.string.app_name),
                 style = MaterialTheme.typography.displayLargeEmphasized,
                 color = MaterialTheme.colorScheme.onPrimaryContainer,
-                fontFamily = DMSerif
-            )
+                )
 
             Spacer(modifier = Modifier.height(8.dp))
 

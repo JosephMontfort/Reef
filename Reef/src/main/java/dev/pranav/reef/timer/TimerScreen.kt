@@ -834,7 +834,6 @@ fun RunningTimerView(
                 text = timeLeft,
                 fontWeight = FontWeight.Bold,
                 textAlign = TextAlign.Center,
-                fontFamily = DMSerif,
                 fontSize = 88.sp,
                 color = if (isBreak) MaterialTheme.colorScheme.tertiary else MaterialTheme.colorScheme.onSurface
             )
