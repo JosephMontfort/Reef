@@ -39,8 +39,8 @@ class AppIntroActivity: ComponentActivity() {
         super.onCreate(savedInstanceState)
         setContent {
             ReefTheme { AppIntroScreen() }
+            BackHandler {}
         }
-        BackHandler {}
     }
 }
 
