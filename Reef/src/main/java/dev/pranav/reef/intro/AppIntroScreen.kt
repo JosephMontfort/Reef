@@ -31,6 +31,7 @@ import androidx.core.content.edit
 import androidx.core.net.toUri
 import dev.pranav.appintro.AppIntro
 import dev.pranav.appintro.IntroPage
+import dev.pranav.appintro.AnimatedCustomSlide
 import dev.pranav.reef.R
 import dev.pranav.reef.routine.Routines
 import dev.pranav.reef.ui.ReefTheme
