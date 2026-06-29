@@ -988,9 +988,6 @@ fun RunningTimerView(
 
         // ── Actions follow directly below allowed apps ───────────────────
 
-        val isBreak =
-            state.pomodoroPhase == PomodoroPhase.SHORT_BREAK || state.pomodoroPhase == PomodoroPhase.LONG_BREAK || state.pomodoroPhase == PomodoroPhase.COUNT_UP_BREAK
-
         if (!isStrictMode || (isPaused && isBreak)) {
             RunningTimerActions(
                 modifier = Modifier
