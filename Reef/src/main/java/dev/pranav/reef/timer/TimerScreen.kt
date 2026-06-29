@@ -787,19 +787,15 @@ fun RunningTimerView(
     val totalCycles = state.totalCycles
     val isCountUpBreak = state.pomodoroPhase == PomodoroPhase.COUNT_UP_BREAK
 
-    Box(
-        modifier = Modifier.fillMaxSize(),
-        contentAlignment = Alignment.Center
+    Column(
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Top,
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(top = 8.dp, bottom = 8.dp),
     ) {
-        Column(
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.SpaceBetween,
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(top = 16.dp, bottom = 8.dp),
-        ) {
-            // ── Top spacer keeps timer vertically centered ──
-            Spacer(modifier = Modifier.height(8.dp))
+        // ── Top spacer — timer sits in upper third ──
+        Spacer(modifier = Modifier.height(8.dp))
 
             if (isPomodoroMode) {
                 Row(
@@ -987,10 +983,9 @@ fun RunningTimerView(
                         }
                     }
                 }
-                // Space for the bottom action buttons overlay
-                Spacer(Modifier.height(96.dp))
-            }
-        }
+
+        // ── Actions sit inline below allowed apps ──────────────────────────
+        Spacer(Modifier.weight(1f))
 
         val isBreak =
             state.pomodoroPhase == PomodoroPhase.SHORT_BREAK || state.pomodoroPhase == PomodoroPhase.LONG_BREAK || state.pomodoroPhase == PomodoroPhase.COUNT_UP_BREAK
@@ -998,9 +993,8 @@ fun RunningTimerView(
         if (!isStrictMode || (isPaused && isBreak)) {
             RunningTimerActions(
                 modifier = Modifier
-                    .align(Alignment.BottomCenter)
-                    .padding(horizontal = 16.dp, vertical = 24.dp)
-                    .fillMaxWidth(0.95f),
+                    .padding(horizontal = 16.dp, vertical = 12.dp)
+                    .fillMaxWidth(),
                 isPaused = isPaused,
                 isBreak = isBreak,
                 preventStop = prefs.getBoolean("prevent_stop_session", false),
@@ -1020,9 +1014,7 @@ fun RunningTimerView(
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 textAlign = TextAlign.Center,
-                modifier = Modifier
-                    .align(Alignment.BottomCenter)
-                    .padding(bottom = 16.dp)
+                modifier = Modifier.padding(bottom = 16.dp)
             )
         }
     }
