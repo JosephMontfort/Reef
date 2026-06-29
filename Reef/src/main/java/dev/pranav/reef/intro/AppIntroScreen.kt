@@ -113,7 +113,7 @@ fun AppIntroScreen() {
     // 2. Accessibility Service (OPTIONAL)
     pages.add(
         IntroPage(
-            title = "", description = "", backgroundColor = Color(0xFF607D8B), contentColor = Color.White,
+            title = "", description = "", backgroundColor = Color(0xFF4527A0), contentColor = Color.White,
             onNext = { true },
             customContent = {
                 val accessGranted = remember(resumeTrigger) { context.isAccessibilityServiceEnabledForBlocker() }

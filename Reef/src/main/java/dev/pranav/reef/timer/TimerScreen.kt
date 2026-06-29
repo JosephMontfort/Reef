@@ -788,20 +788,18 @@ fun RunningTimerView(
     val isCountUpBreak = state.pomodoroPhase == PomodoroPhase.COUNT_UP_BREAK
 
     Box(
-        modifier = Modifier
-            .fillMaxSize(),
+        modifier = Modifier.fillMaxSize(),
         contentAlignment = Alignment.Center
     ) {
         Column(
             horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.Center,
+            verticalArrangement = Arrangement.SpaceBetween,
             modifier = Modifier
                 .fillMaxSize()
-                .padding(start = 24.dp, end = 24.dp, top = 24.dp, bottom = 80.dp),
+                .padding(top = 16.dp, bottom = 8.dp),
         ) {
-            Spacer(modifier = Modifier.weight(0.5f))
-            androidx.compose.foundation.layout.Spacer(modifier = androidx.compose.ui.Modifier.height(32.dp))
-            // -----------------------------------------
+            // ── Top spacer keeps timer vertically centered ──
+            Spacer(modifier = Modifier.height(8.dp))
 
             if (isPomodoroMode) {
                 Row(
@@ -938,53 +936,59 @@ fun RunningTimerView(
                 )
             }
 
-            // Allowed apps quick-launch strip — hidden during breaks
-            val allowedApps = WhitelistAppCache.apps
-            if (allowedApps.isNotEmpty() && !isBreak) {
-                Spacer(Modifier.height(20.dp))
-                Text(
-                    text = stringResource(R.string.allowed_apps_label),
-                    style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier
-                        .align(Alignment.Start)
-                        .padding(horizontal = 24.dp)
-                )
-                Spacer(Modifier.height(8.dp))
-                val launchContext = LocalContext.current
-                LazyRow(
-                    contentPadding = PaddingValues(horizontal = 20.dp),
-                    horizontalArrangement = Arrangement.spacedBy(12.dp),
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    items(allowedApps, key = { it.packageName }) { app ->
-                        Column(
-                            horizontalAlignment = Alignment.CenterHorizontally,
-                            modifier = Modifier
-                                .clickable {
-                                    launchContext.packageManager
-                                        .getLaunchIntentForPackage(app.packageName)
-                                        ?.apply { addFlags(Intent.FLAG_ACTIVITY_NEW_TASK) }
-                                        ?.let { launchContext.startActivity(it) }
-                                }
-                                .padding(4.dp)
-                        ) {
-                            Image(
-                                bitmap = app.icon,
-                                contentDescription = app.label,
-                                modifier = Modifier.size(44.dp)
-                            )
-                            Spacer(Modifier.height(4.dp))
-                            Text(
-                                text = app.label,
-                                style = MaterialTheme.typography.labelSmall,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis,
-                                modifier = Modifier.widthIn(max = 56.dp)
-                            )
+            // ── Bottom section: allowed apps strip ──────────────────
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                val allowedApps = WhitelistAppCache.apps
+                if (allowedApps.isNotEmpty() && !isBreak) {
+                    Text(
+                        text = stringResource(R.string.allowed_apps_label),
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier
+                            .align(Alignment.Start)
+                            .padding(horizontal = 24.dp)
+                    )
+                    Spacer(Modifier.height(8.dp))
+                    val launchContext = LocalContext.current
+                    LazyRow(
+                        contentPadding = PaddingValues(horizontal = 20.dp),
+                        horizontalArrangement = Arrangement.spacedBy(12.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        items(allowedApps, key = { it.packageName }) { app ->
+                            Column(
+                                horizontalAlignment = Alignment.CenterHorizontally,
+                                modifier = Modifier
+                                    .clickable {
+                                        launchContext.packageManager
+                                            .getLaunchIntentForPackage(app.packageName)
+                                            ?.apply { addFlags(Intent.FLAG_ACTIVITY_NEW_TASK) }
+                                            ?.let { launchContext.startActivity(it) }
+                                    }
+                                    .padding(4.dp)
+                            ) {
+                                Image(
+                                    bitmap = app.icon,
+                                    contentDescription = app.label,
+                                    modifier = Modifier.size(44.dp)
+                                )
+                                Spacer(Modifier.height(4.dp))
+                                Text(
+                                    text = app.label,
+                                    style = MaterialTheme.typography.labelSmall,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                    modifier = Modifier.widthIn(max = 56.dp)
+                                )
+                            }
                         }
                     }
                 }
+                // Space for the bottom action buttons overlay
+                Spacer(Modifier.height(96.dp))
             }
         }
 

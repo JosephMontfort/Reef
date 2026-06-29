@@ -13,9 +13,9 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Warning
+import androidx.compose.material.icons.rounded.Accessibility
 import androidx.compose.ui.platform.LocalContext
 import dev.pranav.reef.util.isAccessibilityServiceEnabledForBlocker
-import dev.pranav.reef.util.showAccessibilityDialog
 import androidx.compose.material.icons.outlined.Public
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -40,6 +40,7 @@ fun WebsiteBlocklistScreen(onBackPressed: () -> Unit) {
 
     var showAddDialog by remember { mutableStateOf(false) }
     var showCustomBrowserDialog by remember { mutableStateOf(false) }
+    var showAccessibilityPermDialog by remember { mutableStateOf(false) }
     var editingDomain by remember { mutableStateOf<String?>(null) }
     var editingIsLimit by remember { mutableStateOf(false) }
     var editingHours by remember { mutableStateOf(0) }
@@ -135,9 +136,7 @@ fun WebsiteBlocklistScreen(onBackPressed: () -> Unit) {
                                 )
                             }
                             TextButton(onClick = {
-                                activity?.showAccessibilityDialog()
-                                accessibilityGranted.value =
-                                    context.isAccessibilityServiceEnabledForBlocker()
+                                showAccessibilityPermDialog = true
                             }) {
                                 Text(
                                     "Grant",
@@ -222,6 +221,52 @@ fun WebsiteBlocklistScreen(onBackPressed: () -> Unit) {
     }
 
     CustomBrowserDialog(showDialog = showCustomBrowserDialog, onDismiss = { showCustomBrowserDialog = false })
+
+    if (showAccessibilityPermDialog) {
+        AlertDialog(
+            onDismissRequest = {
+                showAccessibilityPermDialog = false
+                if (!context.isAccessibilityServiceEnabledForBlocker()) {
+                    android.widget.Toast.makeText(
+                        context,
+                        context.getString(R.string.accessibility_error_toast),
+                        android.widget.Toast.LENGTH_LONG
+                    ).show()
+                }
+                accessibilityGranted.value = context.isAccessibilityServiceEnabledForBlocker()
+            },
+            icon = {
+                Icon(
+                    Icons.Rounded.Accessibility,
+                    contentDescription = null,
+                    modifier = Modifier.size(32.dp),
+                    tint = MaterialTheme.colorScheme.primary
+                )
+            },
+            title = { Text(stringResource(R.string.accessibility_service)) },
+            text = { Text(stringResource(R.string.accessibility_dialog)) },
+            confirmButton = {
+                Button(onClick = {
+                    showAccessibilityPermDialog = false
+                    context.startActivity(android.content.Intent(android.provider.Settings.ACTION_ACCESSIBILITY_SETTINGS))
+                }) {
+                    Text(stringResource(R.string.agree))
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = {
+                    showAccessibilityPermDialog = false
+                    android.widget.Toast.makeText(
+                        context,
+                        context.getString(R.string.accessibility_error_toast),
+                        android.widget.Toast.LENGTH_LONG
+                    ).show()
+                }) {
+                    Text(stringResource(android.R.string.cancel))
+                }
+            }
+        )
+    }
 
     if (showAddDialog) {
         val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
