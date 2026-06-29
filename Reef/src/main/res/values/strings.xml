@@ -456,4 +456,4 @@
     <string name="start_count_up">Start Counting</string>
     <string name="earned_break_budget">Break budget: %s earned</string>
     <string name="redeem_break">Take Break</string>
-    <!-- CountUp mode -->
+</resources>
