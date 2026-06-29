@@ -794,8 +794,8 @@ fun RunningTimerView(
             .fillMaxSize()
             .padding(top = 8.dp, bottom = 8.dp),
     ) {
-        // ── Top spacer — timer sits in upper third ──
-        Spacer(modifier = Modifier.height(8.dp))
+        // ── Push timer to vertical center of upper half (~25% from top) ──
+        Spacer(modifier = Modifier.fillMaxHeight(0.12f))
 
             if (isPomodoroMode) {
                 Row(
@@ -932,7 +932,8 @@ fun RunningTimerView(
                 )
             }
 
-            // ── Bottom section: allowed apps strip ──────────────────
+            // ── Bottom section: allowed apps strip — sits closer to buttons ──
+            Spacer(modifier = Modifier.weight(1f))
             Column(
                 horizontalAlignment = Alignment.CenterHorizontally,
                 modifier = Modifier.fillMaxWidth()
@@ -983,9 +984,9 @@ fun RunningTimerView(
                         }
                     }
                 }
+            }
 
-        // ── Actions sit inline below allowed apps ──────────────────────────
-        Spacer(Modifier.weight(1f))
+        // ── Actions follow directly below allowed apps ───────────────────
 
         val isBreak =
             state.pomodoroPhase == PomodoroPhase.SHORT_BREAK || state.pomodoroPhase == PomodoroPhase.LONG_BREAK || state.pomodoroPhase == PomodoroPhase.COUNT_UP_BREAK

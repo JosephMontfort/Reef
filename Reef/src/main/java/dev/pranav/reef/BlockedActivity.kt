@@ -169,10 +169,10 @@ fun HomeBlockScreen(onLaunchApp: (Intent) -> Unit) {
                 .padding(horizontal = 16.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
+            Spacer(Modifier.height(20.dp))
+            // Timer circle — tightly wrapped with a little breathing room
+            FocusTimerDisplay(size = 230.dp)
             Spacer(Modifier.height(16.dp))
-            // Timer circle — tightly wrapped, no excess space
-            FocusTimerDisplay(size = 220.dp)
-            Spacer(Modifier.height(12.dp))
             HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
             Spacer(Modifier.height(12.dp))
             Text(

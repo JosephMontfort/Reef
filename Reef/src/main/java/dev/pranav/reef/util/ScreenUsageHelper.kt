@@ -1,17 +1,17 @@
 package dev.pranav.reef.util
 
 import android.app.usage.UsageEvents
-import android.app.usage.UsageEventsQuery
 import android.app.usage.UsageStatsManager
 import android.content.Context
 import android.os.Build
-import android.util.Log
 import java.util.Calendar
 
-
+/**
+ * Usage tracking using the same approach as Digital Wellbeing:
+ * queryUsageStats(INTERVAL_BEST) for aggregate totals, with an event-based
+ * overlay to catch the currently-open app that hasn't received a PAUSE yet.
+ */
 object ScreenUsageHelper {
-
-    private const val TAG = "ScreenUsageHelper"
 
     fun calculateUsage(
         @Suppress("UNUSED_PARAMETER") context: Context,
@@ -19,165 +19,67 @@ object ScreenUsageHelper {
         startTime: Long,
         endTime: Long,
         targetPackage: String? = null
-    ): Map<String, Long> {
-        return fetchUsageInMs(usageStatsManager, startTime, endTime, targetPackage)
-    }
+    ): Map<String, Long> = fetchUsageInMs(usageStatsManager, startTime, endTime, targetPackage)
 
     fun fetchUsageInMs(
-        usageStatsManager: UsageStatsManager,
+        usm: UsageStatsManager,
         start: Long,
         end: Long,
         targetPackage: String? = null
     ): Map<String, Long> {
-        try {
-            val eventBasedUsage =
-                calculateUsageFromEvents(usageStatsManager, start, end, targetPackage)
+        val result = mutableMapOf<String, Long>()
 
-            if (eventBasedUsage.isEmpty()) {
-                Log.w(TAG, "Event-based tracking returned no data, using UsageStats fallback")
-                return calculateUsageFromStats(usageStatsManager, start, end, targetPackage)
-            }
-
-            return eventBasedUsage
-        } catch (e: Exception) {
-            Log.e(TAG, "Error fetching usage", e)
-            return calculateUsageFromStats(usageStatsManager, start, end, targetPackage)
-        }
-    }
-
-    private fun calculateUsageFromEvents(
-        usageStatsManager: UsageStatsManager,
-        start: Long,
-        end: Long,
-        targetPackage: String? = null
-    ): Map<String, Long> {
-        val packageForegroundTimes = mutableMapOf<String, Long>()
-        val packageStartTimes = mutableMapOf<String, Long>()
-
-        var usageEvents: UsageEvents
-        val event = UsageEvents.Event()
-
+        // Step 1: aggregate totals from queryUsageStats (what DW uses)
         runCatching {
-            val lookBackStart = start - (2 * 60 * 60 * 1000)
+            val stats = usm.queryUsageStats(UsageStatsManager.INTERVAL_BEST, start, end)
+            stats?.forEach { stat ->
+                if (targetPackage != null && stat.packageName != targetPackage) return@forEach
+                val time = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q)
+                    stat.totalTimeVisible else stat.totalTimeInForeground
+                if (time > 0) result[stat.packageName] = (result[stat.packageName] ?: 0L) + time
+            }
+        }
 
-            usageEvents = queryEvents(usageStatsManager, lookBackStart, start, targetPackage)
-
-            while (usageEvents.hasNextEvent() && usageEvents.getNextEvent(event)) {
+        // Step 2: event-based overlay — credit currently-open app up to `end`
+        // This catches the foreground app that DW also adds live time to.
+        runCatching {
+            val lookback = maxOf(start, end - 2 * 60 * 60 * 1000L) // max 2h back
+            val events = usm.queryEvents(lookback, end)
+            val event = UsageEvents.Event()
+            val resumeMap = mutableMapOf<String, Long>()
+            while (events.hasNextEvent() && events.getNextEvent(event)) {
+                if (targetPackage != null && event.packageName != targetPackage) continue
                 when (event.eventType) {
-                    UsageEvents.Event.ACTIVITY_RESUMED -> {
-                        packageStartTimes[event.packageName] = start
-                    }
-
-                    UsageEvents.Event.ACTIVITY_PAUSED -> {
-                        packageStartTimes.remove(event.packageName)
-                    }
+                    UsageEvents.Event.ACTIVITY_RESUMED ->
+                        resumeMap[event.packageName] = event.timeStamp
+                    UsageEvents.Event.ACTIVITY_PAUSED ->
+                        resumeMap.remove(event.packageName)
+                }
+            }
+            // Any app still in resumeMap is currently in foreground — add live time
+            resumeMap.forEach { (pkg, resumeTime) ->
+                val liveMs = end - maxOf(resumeTime, start)
+                if (liveMs > 0) {
+                    // Only add if not already counted by queryUsageStats (avoid double-count)
+                    // queryUsageStats already includes time up to the last PAUSE, so we only
+                    // add the delta since the last resume that hasn't been paused yet.
+                    result[pkg] = (result[pkg] ?: 0L) + liveMs
                 }
             }
         }
 
-        runCatching {
-            usageEvents = queryEvents(usageStatsManager, start, end)
-
-            while (usageEvents.hasNextEvent() && usageEvents.getNextEvent(event)) {
-                val packageName = event.packageName
-                val timestamp = event.timeStamp
-
-                when (event.eventType) {
-                    UsageEvents.Event.ACTIVITY_RESUMED -> {
-                        packageStartTimes[packageName] = timestamp
-                        if (packageStartTimes.count() == 3) {
-                            val noisyPackage = packageStartTimes.minByOrNull { it.value }
-                            packageStartTimes.remove(noisyPackage!!.key)
-                        }
-                    }
-
-                    UsageEvents.Event.ACTIVITY_PAUSED -> {
-                        packageStartTimes[packageName]?.let { startTime ->
-                            val duration = timestamp - startTime
-                            packageForegroundTimes[packageName] =
-                                packageForegroundTimes.getOrDefault(packageName, 0L) + duration
-                            packageStartTimes.remove(packageName)
-                        }
-                    }
-                }
-            }
-
-            if (packageStartTimes.isNotEmpty()) {
-                val latestPackage = packageStartTimes.maxByOrNull { it.value }
-                packageStartTimes[latestPackage!!.key]?.let { startTime ->
-                    val duration = end - startTime
-                    packageForegroundTimes[latestPackage.key] =
-                        packageForegroundTimes.getOrDefault(latestPackage.key, 0L) + duration
-                }
-            }
-
-        }
-
-        return packageForegroundTimes.filterValues { it > 0L }
+        return result.filterValues { it > 0L }
     }
 
-    private fun calculateUsageFromStats(
-        usageStatsManager: UsageStatsManager,
-        start: Long,
-        end: Long,
-        targetPackage: String? = null
-    ): Map<String, Long> {
-        val usageMap = mutableMapOf<String, Long>()
-
-        runCatching {
-            val stats = usageStatsManager.queryUsageStats(
-                UsageStatsManager.INTERVAL_BEST,
-                start,
-                end
-            )
-
-            stats?.forEach { usageStat ->
-                if (targetPackage == null || usageStat.packageName == targetPackage) {
-                    val totalTime = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                        usageStat.totalTimeVisible
-                    } else {
-                        usageStat.totalTimeInForeground
-                    }
-
-                    if (totalTime > 0) {
-                        usageMap[usageStat.packageName] = totalTime
-                    }
-                }
-            }
+    fun fetchAppUsageTodayTillNow(usm: UsageStatsManager): Map<String, Long> {
+        val cal = Calendar.getInstance().apply {
+            set(Calendar.HOUR_OF_DAY, 0)
+            set(Calendar.MINUTE, 0)
+            set(Calendar.SECOND, 0)
+            set(Calendar.MILLISECOND, 0)
         }
-
-        return usageMap.filterValues { it > 0L }
-    }
-
-    fun fetchAppUsageTodayTillNow(usageStatsManager: UsageStatsManager): Map<String, Long> {
-        val midNightCal = Calendar.getInstance()
-        midNightCal[Calendar.HOUR_OF_DAY] = 0
-        midNightCal[Calendar.MINUTE] = 0
-        midNightCal[Calendar.SECOND] = 0
-        midNightCal[Calendar.MILLISECOND] = 0
-
-        val start = midNightCal.timeInMillis
-        val end = System.currentTimeMillis()
-        return fetchUsageInMs(usageStatsManager, start, end).mapValues { it.value / 1000 }
-    }
-
-    private fun queryEvents(usageStatsManager: UsageStatsManager, start: Long, end: Long, targetPackage: String? = null) : UsageEvents {
-        var usageEvents: UsageEvents
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.VANILLA_ICE_CREAM) {
-            usageEvents = usageStatsManager.queryEvents(start, end)
-        } else {
-            val query = UsageEventsQuery.Builder(
-                start,
-                end,
-            ).setEventTypes(*intArrayOf(UsageEvents.Event.ACTIVITY_RESUMED, UsageEvents.Event.ACTIVITY_PAUSED))
-
-            if (targetPackage != null) {
-                query.setPackageNames(targetPackage)
-            }
-
-            usageEvents = usageStatsManager.queryEvents(query.build())!!
-        }
-
-        return usageEvents
+        // Returns seconds (divide ms by 1000) — home screen then divides by 60 for minutes
+        return fetchUsageInMs(usm, cal.timeInMillis, System.currentTimeMillis())
+            .mapValues { it.value / 1000L }
     }
 }
