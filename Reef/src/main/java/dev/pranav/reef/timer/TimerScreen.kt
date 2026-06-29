@@ -276,6 +276,7 @@ private fun SettingsToggleRow(
 }
 
 
+@OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 fun SimpleFocusSetup(onStart: (TimerConfig) -> Unit) {
     var isCountUp by remember { mutableStateOf(prefs.getBoolean("timer_is_count_up", false)) }
@@ -907,13 +908,7 @@ fun RunningTimerView(
                         )
                     }
                 }
-            }            Text(
-                text = timeLeft,
-                fontWeight = FontWeight.Bold,
-                textAlign = TextAlign.Center,
-                fontSize = 88.sp,
-                color = if (isBreak) MaterialTheme.colorScheme.tertiary else MaterialTheme.colorScheme.onSurface
-            )
+            }
 
             if (isStrictMode) {
                 Text(

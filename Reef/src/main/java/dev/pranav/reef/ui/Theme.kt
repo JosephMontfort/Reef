@@ -1,5 +1,4 @@
 package dev.pranav.reef.ui
-import dev.pranav.reef.ui.Typography
 
 import android.os.Build
 import androidx.compose.foundation.isSystemInDarkTheme
@@ -192,7 +191,7 @@ fun ReefTheme(
 
     MaterialExpressiveTheme(
         colorScheme = colorScheme,
-        typography  = Typography,
+        typography  = null,
         shapes      = ReefShapes,
         content     = content
     )

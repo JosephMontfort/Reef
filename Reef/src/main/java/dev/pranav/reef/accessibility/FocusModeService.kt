@@ -34,6 +34,13 @@ import dev.pranav.reef.util.ResilienceManager
 import dev.pranav.reef.util.SessionPersistence
 import java.util.Locale
 import java.util.concurrent.TimeUnit
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 
 @SuppressLint("MissingPermission")
 class FocusModeService : Service() {
@@ -109,8 +116,8 @@ class FocusModeService : Service() {
     private var notificationBuilder: NotificationCompat.Builder? = null
     private var previousInterruptionFilter: Int? = null
     private var initialDuration: Long = 0
-    private val serviceScope = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.Main + kotlinx.coroutines.SupervisorJob())
-    private var countUpJob: kotlinx.coroutines.Job? = null
+    private val serviceScope = CoroutineScope(Dispatchers.Main + SupervisorJob())
+    private var countUpJob: Job? = null
 
     // Track the minute that was last reflected in the notification so we only
     // call notificationManager.notify() ~once per minute during ticking, not every second.
@@ -359,7 +366,7 @@ class FocusModeService : Service() {
         countUpJob?.cancel()
         countUpJob = serviceScope.launch {
             while (true) {
-                kotlinx.coroutines.delay(1000L)
+                delay(1000L)
                 val state = TimerStateManager.state.value
                 if (!state.isRunning || state.isPaused) break
                 val ratio = state.countUpRatio

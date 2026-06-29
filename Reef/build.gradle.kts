@@ -36,6 +36,16 @@ android {
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro"
             )
+
+            val keystoreFile = System.getenv("SIGNING_KEYSTORE_PATH")
+            if (keystoreFile != null) {
+                signingConfig = signingConfigs.create("release").apply {
+                    storeFile = file(keystoreFile)
+                    storePassword = System.getenv("SIGNING_STORE_PASSWORD")
+                    keyAlias = System.getenv("SIGNING_KEY_ALIAS")
+                    keyPassword = System.getenv("SIGNING_KEY_PASSWORD")
+                }
+            }
         }
     }
     compileOptions {

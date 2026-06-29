@@ -11,6 +11,8 @@ private val provider = GoogleFont.Provider(
     certificates = R.array.com_google_android_gms_fonts_certs
 )
 
+val JetBrainsMonoFamily = FontFamily.Monospace
+
 object Typography {
     val DMSerif = FontFamily(
         Font(googleFont = GoogleFont("DM Serif Text"), fontProvider = provider)
