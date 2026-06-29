@@ -1019,7 +1019,7 @@ fun RunningTimerView(
         }
     }
 }
-
+}
 @OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 fun RunningTimerActions(
