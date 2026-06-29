@@ -8,18 +8,23 @@ data class TimerSessionState(
     val isRunning: Boolean = false,
     val isPaused: Boolean = false,
     val timeRemaining: Long = 0,
+    val focusTimeElapsed: Long = 0,
+    val breakBudget: Long = 0,
     val pomodoroPhase: PomodoroPhase = PomodoroPhase.FOCUS,
     val currentCycle: Int = 0,
     val totalCycles: Int = 4,
     val isPomodoroMode: Boolean = false,
-    val isStrictMode: Boolean = false
+    val isCountUpMode: Boolean = false,
+    val isStrictMode: Boolean = false,
+    val countUpRatio: Float = 5f
 )
 
 enum class PomodoroPhase {
     FOCUS,
     SHORT_BREAK,
     LONG_BREAK,
-    COMPLETE
+    COMPLETE,
+    COUNT_UP_BREAK
 }
 
 data class PomodoroConfig(
@@ -56,7 +61,7 @@ object TimerStateManager {
 
     fun isInBreak(): Boolean {
         return _state.value.pomodoroPhase == PomodoroPhase.SHORT_BREAK ||
-                _state.value.pomodoroPhase == PomodoroPhase.LONG_BREAK
+                _state.value.pomodoroPhase == PomodoroPhase.LONG_BREAK ||
+                _state.value.pomodoroPhase == PomodoroPhase.COUNT_UP_BREAK
     }
 }
-

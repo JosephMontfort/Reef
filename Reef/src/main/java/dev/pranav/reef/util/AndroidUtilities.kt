@@ -30,3 +30,8 @@ object AndroidUtilities {
         return typedValue.data
     }
 }
+
+fun formatTime(millis: Long): String {
+    val totalSeconds = millis / 1000
+    return String.format(java.util.Locale.getDefault(), "%02d:%02d", totalSeconds / 60, totalSeconds % 60)
+}

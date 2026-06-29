@@ -15,6 +15,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 
+@OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 fun AnimatedCustomSlide(
     icon: ImageVector,
@@ -32,14 +33,15 @@ fun AnimatedCustomSlide(
     ) {
         AnimatedVisibility(
             visibleState = contentVisible,
-            enter = fadeIn(tween(300)) + 
+            enter = fadeIn(tween(300)) +
                     scaleIn(
                         animationSpec = spring(
                             dampingRatio = Spring.DampingRatioMediumBouncy,
                             stiffness = Spring.StiffnessLow
                         ),
                         initialScale = 0.8f
-                    )
+                    ),
+            exit = fadeOut(tween(200))
         ) {
             Surface(
                 modifier = Modifier.size(140.dp).clip(CircleShape),
@@ -66,11 +68,12 @@ fun AnimatedCustomSlide(
                             stiffness = Spring.StiffnessLow
                         ),
                         initialOffsetY = { it / 3 }
-                    )
+                    ),
+            exit = fadeOut(tween(200))
         ) {
             Text(
                 text = title,
-                style = MaterialTheme.typography.headlineMedium,
+                style = MaterialTheme.typography.headlineMediumEmphasized,
                 fontWeight = FontWeight.Bold,
                 color = Color.White,
                 textAlign = TextAlign.Center,
@@ -89,7 +92,8 @@ fun AnimatedCustomSlide(
                             stiffness = Spring.StiffnessLow
                         ),
                         initialOffsetY = { it / 4 }
-                    )
+                    ),
+            exit = fadeOut(tween(150))
         ) {
             Column(
                 horizontalAlignment = Alignment.CenterHorizontally,

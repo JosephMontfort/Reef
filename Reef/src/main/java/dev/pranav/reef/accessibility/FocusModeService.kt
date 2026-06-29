@@ -50,6 +50,7 @@ class FocusModeService : Service() {
         const val ACTION_RESUME_PERSISTED = "dev.pranav.reef.RESUME_PERSISTED"
         const val ACTION_SKIP_BREAK = "dev.pranav.reef.SKIP_BREAK"
         const val ACTION_STOP = "dev.pranav.reef.STOP_SESSION"
+        const val ACTION_TAKE_BREAK = "dev.pranav.reef.TAKE_BREAK"
         const val EXTRA_TIME_LEFT = "extra_time_left"
         const val EXTRA_TIMER_STATE = "extra_timer_state"
         const val ACTION_PHASE_COMPLETE = "dev.pranav.reef.PHASE_COMPLETE"
@@ -108,6 +109,8 @@ class FocusModeService : Service() {
     private var notificationBuilder: NotificationCompat.Builder? = null
     private var previousInterruptionFilter: Int? = null
     private var initialDuration: Long = 0
+    private val serviceScope = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.Main + kotlinx.coroutines.SupervisorJob())
+    private var countUpJob: kotlinx.coroutines.Job? = null
 
     // Track the minute that was last reflected in the notification so we only
     // call notificationManager.notify() ~once per minute during ticking, not every second.
@@ -232,6 +235,7 @@ class FocusModeService : Service() {
             ACTION_RESUME_PERSISTED -> resumePersistedSession()
             ACTION_SKIP_BREAK       -> skipBreak()
             ACTION_STOP             -> stopSession()
+            ACTION_TAKE_BREAK       -> startCountUpBreak()
             ACTION_PHASE_COMPLETE   -> handlePhaseCompleteIntent()
         }
         return START_STICKY
@@ -255,6 +259,8 @@ class FocusModeService : Service() {
         tickHandler.removeCallbacksAndMessages(null)
         cancelCompletionAlarm()
         handler.removeCallbacksAndMessages(null)  // Flaw4: cancel transitionPomodoroPhase callbacks
+        countUpJob?.cancel()
+        serviceScope.cancel()
 
         // ── Record partial stats on force-stop so no focused minutes are lost ──
         // endPhase computes actualDuration = now - phase.startTimestamp regardless of
@@ -349,10 +355,71 @@ class FocusModeService : Service() {
         transitionPomodoroPhase()
     }
 
+    private fun startCountUp() {
+        countUpJob?.cancel()
+        countUpJob = serviceScope.launch {
+            while (true) {
+                kotlinx.coroutines.delay(1000L)
+                val state = TimerStateManager.state.value
+                if (!state.isRunning || state.isPaused) break
+                val ratio = state.countUpRatio
+                val newElapsed = state.focusTimeElapsed + 1000L
+                // budget = elapsed / ratio  (e.g. ratio=5 → every 5 min focus earns 1 min break)
+                val newBudget = (newElapsed / ratio).toLong()
+                TimerStateManager.updateState {
+                    copy(focusTimeElapsed = newElapsed, breakBudget = newBudget)
+                }
+                broadcastTimerUpdate(formatTime(newElapsed))
+                postNotification(
+                    title = "Focusing · ${formatTime(newElapsed)}",
+                    isRunning = true,
+                    showPauseButton = true,
+                    timeLeft = 0
+                )
+            }
+        }
+    }
+
+    private fun startCountUpBreak() {
+        val state = TimerStateManager.state.value
+        if (!state.isCountUpMode || state.breakBudget <= 0) return
+        countUpJob?.cancel()
+        countUpJob = null
+        val breakDuration = state.breakBudget
+        TimerStateManager.updateState {
+            copy(
+                timeRemaining = breakDuration,
+                pomodoroPhase = PomodoroPhase.COUNT_UP_BREAK,
+                breakBudget = 0
+            )
+        }
+        prefs.edit { putBoolean("focus_mode", false) }
+        restoreDND()
+        initialDuration = breakDuration
+        startCountdown(breakDuration)
+        broadcastTimerUpdate(formatTime(breakDuration))
+    }
+
+    private fun resumeCountUpAfterBreak() {
+        countUpJob?.cancel()
+        TimerStateManager.updateState {
+            copy(
+                pomodoroPhase = PomodoroPhase.FOCUS,
+                isRunning = true, isPaused = false,
+                timeRemaining = 0
+            )
+        }
+        prefs.edit { putBoolean("focus_mode", true) }
+        enableDNDIfNeeded()
+        startCountUp()
+    }
+
     private fun stopSession() {
         tickHandler.removeCallbacksAndMessages(null)
         cancelCompletionAlarm()
         handler.removeCallbacksAndMessages(null)
+        countUpJob?.cancel()
+        countUpJob = null
         SessionPersistence.clear(this)
         Thread { WatchdogManager.stop(this) }.start()
         dev.pranav.reef.watchdog.WatchdogService.stop(this)
@@ -372,11 +439,30 @@ class FocusModeService : Service() {
         val focusTimeMillis = prefs.getLong("focus_time", TimeUnit.MINUTES.toMillis(10))
         val isStrictMode = prefs.getBoolean("strict_mode", false)
         val isPomodoroMode = prefs.getBoolean("pomodoro_mode", false)
+        val isCountUpMode = prefs.getBoolean("count_up_mode", false)
 
         initialDuration = focusTimeMillis
         lastNotifiedMinute = -1L
 
-        if (isPomodoroMode) {
+        if (isCountUpMode) {
+            val ratio = prefs.getFloat("count_up_ratio", 5f)
+            TimerStateManager.updateState {
+                copy(
+                    isRunning = true, isPaused = false,
+                    isPomodoroMode = false, isCountUpMode = true,
+                    isStrictMode = isStrictMode,
+                    countUpRatio = ratio,
+                    focusTimeElapsed = 0, breakBudget = 0,
+                    pomodoroPhase = PomodoroPhase.FOCUS
+                )
+            }
+            FocusStats.startSession(SessionType.SIMPLE)
+            FocusStats.startPhase(PhaseType.FOCUS, 0)
+            prefs.edit { putBoolean("focus_mode", true) }
+            enableDNDIfNeeded()
+            startCountUp()
+            return
+        } else if (isPomodoroMode) {
             val config = PomodoroConfig(
                 focusDuration = prefs.getLong("pomodoro_focus_duration", 25 * 60 * 1000L),
                 shortBreakDuration = prefs.getLong("pomodoro_short_break_duration", 5 * 60 * 1000L),
@@ -445,19 +531,20 @@ class FocusModeService : Service() {
         if (state.isStrictMode) return
         // Don't pause during breaks — breaks are unpauseable
         if (state.isPomodoroMode && (state.pomodoroPhase == dev.pranav.reef.timer.PomodoroPhase.SHORT_BREAK || state.pomodoroPhase == dev.pranav.reef.timer.PomodoroPhase.LONG_BREAK)) return
+        if (state.isCountUpMode && state.pomodoroPhase == PomodoroPhase.COUNT_UP_BREAK) return
 
-        tickHandler.removeCallbacksAndMessages(null)
-        cancelCompletionAlarm()
-        
-        // Calculate true remaining time to prevent sub-second pause drift
-        val exactRemaining = (expectedCompletionElapsed - android.os.SystemClock.elapsedRealtime()).coerceAtLeast(0L)
-        TimerStateManager.updateState { copy(isRunning = false, isPaused = true, timeRemaining = exactRemaining) }
+        if (state.isCountUpMode) {
+            countUpJob?.cancel()
+            countUpJob = null
+            TimerStateManager.updateState { copy(isRunning = false, isPaused = true) }
+        } else {
+            tickHandler.removeCallbacksAndMessages(null)
+            cancelCompletionAlarm()
+            val exactRemaining = (expectedCompletionElapsed - android.os.SystemClock.elapsedRealtime()).coerceAtLeast(0L)
+            TimerStateManager.updateState { copy(isRunning = false, isPaused = true, timeRemaining = exactRemaining) }
+        }
 
         // ── Blocks stay active during pause ──────────────────────────────────
-        // Do NOT set focus_mode=false, do NOT dismiss overlay, do NOT restore DND.
-        // The user paused the timer but the focus session (and all blocking) is
-        // still in effect.  Only resuming or ending the session lifts the blocks.
-
         SessionPersistence.savePaused(
             this, TimerStateManager.state.value,
             state.timeRemaining, initialDuration,
@@ -471,12 +558,19 @@ class FocusModeService : Service() {
             showPauseButton = false,
             timeLeft = state.timeRemaining
         )
-        broadcastTimerUpdate(formatTime(state.timeRemaining))
+        broadcastTimerUpdate(if (state.isCountUpMode) formatTime(state.focusTimeElapsed) else formatTime(state.timeRemaining))
     }
 
     private fun resumeTimer() {
         val state = TimerStateManager.state.value
         TimerStateManager.updateState { copy(isRunning = true, isPaused = false) }
+
+        if (state.isCountUpMode) {
+            lastNotifiedMinute = -1L
+            postNotification(title = getNotificationTitle(), isRunning = true, showPauseButton = true, timeLeft = 0)
+            startCountUp()
+            return
+        }
 
         val isFocusPhase = state.isPomodoroMode && state.pomodoroPhase == PomodoroPhase.FOCUS
         prefs.edit { putBoolean("focus_mode", isFocusPhase || !state.isPomodoroMode) }
@@ -650,8 +744,14 @@ class FocusModeService : Service() {
     // ─── Timer completion ───────────────────────────────────────────────────────
 
     private fun handleTimerComplete(overflowMs: Long = 0L) {
-        if (!TimerStateManager.state.value.isPomodoroMode) endSession()
-        else transitionPomodoroPhase(overflowMs)
+        val state = TimerStateManager.state.value
+        if (state.isCountUpMode && state.pomodoroPhase == PomodoroPhase.COUNT_UP_BREAK) {
+            resumeCountUpAfterBreak()
+        } else if (!state.isPomodoroMode) {
+            endSession()
+        } else {
+            transitionPomodoroPhase(overflowMs)
+        }
     }
 
     private fun endSession() {

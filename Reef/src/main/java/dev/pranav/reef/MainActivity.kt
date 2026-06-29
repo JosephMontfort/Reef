@@ -329,7 +329,8 @@ class MainActivity: ComponentActivity() {
                                 onResumeTimer = { resumeFocusMode() },
                                 onCancelTimer = { cancelFocusMode() },
                                 onSkipTimer = { skipBreak() },
-                                onRestartTimer = { restartFocusMode() }
+                                onRestartTimer = { restartFocusMode() },
+                                onTakeBreak = { takeBreak() }
                             )
                         }
 
@@ -486,6 +487,7 @@ class MainActivity: ComponentActivity() {
             is TimerConfig.Simple -> prefs.edit {
                 putBoolean("focus_mode", true)
                 putBoolean("pomodoro_mode", false)
+                putBoolean("count_up_mode", false)
                 putLong("focus_time", config.minutes * 60 * 1000L)
                 putBoolean("strict_mode", config.strictMode)
             }
@@ -493,6 +495,7 @@ class MainActivity: ComponentActivity() {
             is TimerConfig.Pomodoro -> prefs.edit {
                 putBoolean("focus_mode", true)
                 putBoolean("pomodoro_mode", true)
+                putBoolean("count_up_mode", false)
                 putLong("focus_time", config.focusMinutes * 60 * 1000L)
                 putLong("pomodoro_focus_duration", config.focusMinutes * 60 * 1000L)
                 putLong("pomodoro_short_break_duration", config.shortBreakMinutes * 60 * 1000L)
@@ -502,9 +505,23 @@ class MainActivity: ComponentActivity() {
                 putString("pomodoro_state", "FOCUS")
                 putBoolean("strict_mode", config.strictMode)
             }
+
+            is TimerConfig.CountUp -> prefs.edit {
+                putBoolean("focus_mode", true)
+                putBoolean("pomodoro_mode", false)
+                putBoolean("count_up_mode", true)
+                putFloat("count_up_ratio", config.ratio.toFloat())
+                putBoolean("strict_mode", config.strictMode)
+            }
         }
         startForegroundService(Intent(this, FocusModeService::class.java).apply {
             action = FocusModeService.ACTION_START
+        })
+    }
+
+    private fun takeBreak() {
+        startService(Intent(this, FocusModeService::class.java).apply {
+            action = FocusModeService.ACTION_TAKE_BREAK
         })
     }
 
