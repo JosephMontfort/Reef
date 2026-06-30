@@ -6,21 +6,27 @@ import android.os.Build
 import java.util.Calendar
 
 /**
- * Usage tracking using UsageStatsManager.queryUsageStats(INTERVAL_DAILY, ...) —
- * the same approach used by Digital Wellbeing and virtually every reputable
- * third-party screen-time app. This is the official Android API for this
- * exact purpose.
+ * Usage tracking using UsageStatsManager.queryAndAggregateUsageStats() —
+ * the official convenience method built specifically to return one merged
+ * total per package for an arbitrary time range. This is what Digital
+ * Wellbeing and reputable third-party screen-time apps use.
  *
  * Two prior approaches were tried and rejected:
  * 1. INTERVAL_BEST — silently picks whatever bucket size (daily/weekly/
- *    monthly) the OS has data for, which is NOT guaranteed to match your
- *    query window. This caused single-day totals to show 30+ hours.
+ *    monthly) the OS has data for, not guaranteed to match the query
+ *    window. Caused single-day totals to show 30+ hours.
  * 2. Manual queryEvents() RESUMED/PAUSED parsing — fragile across OEM
- *    ROMs, multi-window/split-screen, and long-running sessions; measured
- *    to undercount real usage by roughly half in testing.
+ *    ROMs; undercounted real usage by roughly half in testing.
+ * 3. Manual queryUsageStats(INTERVAL_DAILY, ...) summed with +=  — the OS
+ *    can return MULTIPLE UsageStats entries for the SAME package within
+ *    one day (internal sub-day flush boundaries), and each entry's
+ *    totalTimeInForeground/totalTimeVisible is already a running total,
+ *    not a delta. Summing them with += multiplied real usage several
+ *    times over (e.g. Instagram showing 2h28m for an actual 32m).
  *
- * INTERVAL_DAILY explicitly requests the smallest standard bucket, and the
- * OS guarantees returned stats are a subset of the requested time range.
+ * queryAndAggregateUsageStats() merges those duplicate/overlapping
+ * fragments correctly internally, returning exactly one UsageStats per
+ * package — no manual merge logic needed.
  */
 object ScreenUsageHelper {
 
@@ -42,14 +48,14 @@ object ScreenUsageHelper {
 
         val result = mutableMapOf<String, Long>()
         runCatching {
-            val stats = usm.queryUsageStats(UsageStatsManager.INTERVAL_DAILY, start, end)
-            stats?.forEach { stat ->
-                if (targetPackage != null && stat.packageName != targetPackage) return@forEach
+            val statsMap = usm.queryAndAggregateUsageStats(start, end)
+            statsMap.forEach { (pkg, stat) ->
+                if (targetPackage != null && pkg != targetPackage) return@forEach
                 // totalTimeVisible (API 29+) avoids double-counting overlapping
                 // windows/activities — same field Digital Wellbeing reads.
                 val time = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q)
                     stat.totalTimeVisible else stat.totalTimeInForeground
-                if (time > 0) result[stat.packageName] = (result[stat.packageName] ?: 0L) + time
+                if (time > 0) result[pkg] = time
             }
         }
         return result.filterValues { it > 0L }
