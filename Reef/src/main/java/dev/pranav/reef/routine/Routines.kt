@@ -36,13 +36,37 @@ object Routines {
     fun save(routine: Routine, context: Context) {
         val routines = getAll().toMutableList()
         val index = routines.indexOfFirst { it.id == routine.id }
+        val previous = if (index >= 0) routines[index] else null
 
         if (index >= 0) routines[index] = routine
         else routines.add(routine)
 
         saveAll(routines)
 
-        RoutineSessionManager.updateSessionLimits(routine)
+        val scheduleChanged = previous != null && previous.schedule != routine.schedule
+        when {
+            !routine.isEnabled -> {
+                RoutineSessionManager.stopSession(context, routine.id)
+                RoutineAlarmScheduler.cancel(context, routine.id)
+            }
+            scheduleChanged -> {
+                // Schedule window moved — drop the stale session/alarms and
+                // re-evaluate against the new times instead of only patching limits.
+                RoutineSessionManager.stopSession(context, routine.id)
+                RoutineAlarmScheduler.cancel(context, routine.id)
+                when (routine.schedule.type) {
+                    RoutineSchedule.ScheduleType.MANUAL ->
+                        RoutineSessionManager.startSession(context, routine)
+                    RoutineSchedule.ScheduleType.DAILY,
+                    RoutineSchedule.ScheduleType.WEEKLY ->
+                        RoutineSessionManager.activateIfInWindow(context, routine)
+                }
+            }
+            else -> {
+                // Only limits/groups changed — patch the active session in place
+                RoutineSessionManager.updateSessionLimits(routine)
+            }
+        }
     }
 
     fun saveAll(routines: List<Routine>, context: Context) {

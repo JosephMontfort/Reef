@@ -1,6 +1,5 @@
 package dev.pranav.reef.util
 
-import android.app.usage.UsageEvents
 import android.app.usage.UsageStatsManager
 import android.content.Context
 import android.os.Build
@@ -29,7 +28,10 @@ object ScreenUsageHelper {
     ): Map<String, Long> {
         val result = mutableMapOf<String, Long>()
 
-        // Step 1: aggregate totals from queryUsageStats (what DW uses)
+        // queryUsageStats(INTERVAL_BEST) already reflects live foreground time
+        // for the currently-open app on modern Android (this is what Digital
+        // Wellbeing reads from too) — no separate event-based overlay needed.
+        // Adding one on top double-counts the in-progress session.
         runCatching {
             val stats = usm.queryUsageStats(UsageStatsManager.INTERVAL_BEST, start, end)
             stats?.forEach { stat ->
@@ -37,34 +39,6 @@ object ScreenUsageHelper {
                 val time = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q)
                     stat.totalTimeVisible else stat.totalTimeInForeground
                 if (time > 0) result[stat.packageName] = (result[stat.packageName] ?: 0L) + time
-            }
-        }
-
-        // Step 2: event-based overlay — credit currently-open app up to `end`
-        // This catches the foreground app that DW also adds live time to.
-        runCatching {
-            val lookback = maxOf(start, end - 2 * 60 * 60 * 1000L) // max 2h back
-            val events = usm.queryEvents(lookback, end)
-            val event = UsageEvents.Event()
-            val resumeMap = mutableMapOf<String, Long>()
-            while (events.hasNextEvent() && events.getNextEvent(event)) {
-                if (targetPackage != null && event.packageName != targetPackage) continue
-                when (event.eventType) {
-                    UsageEvents.Event.ACTIVITY_RESUMED ->
-                        resumeMap[event.packageName] = event.timeStamp
-                    UsageEvents.Event.ACTIVITY_PAUSED ->
-                        resumeMap.remove(event.packageName)
-                }
-            }
-            // Any app still in resumeMap is currently in foreground — add live time
-            resumeMap.forEach { (pkg, resumeTime) ->
-                val liveMs = end - maxOf(resumeTime, start)
-                if (liveMs > 0) {
-                    // Only add if not already counted by queryUsageStats (avoid double-count)
-                    // queryUsageStats already includes time up to the last PAUSE, so we only
-                    // add the delta since the last resume that hasn't been paused yet.
-                    result[pkg] = (result[pkg] ?: 0L) + liveMs
-                }
             }
         }
 

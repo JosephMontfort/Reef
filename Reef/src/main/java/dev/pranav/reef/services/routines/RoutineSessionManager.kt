@@ -213,6 +213,20 @@ object RoutineSessionManager {
         return strictestLimit
     }
 
+    /**
+     * NOTE on time-windowed limits (no continuous polling required):
+     * Usage is already scoped to [session.startTime, now] rather than the
+     * full calendar day — this is what makes a 7–8pm routine limit apply
+     * only to usage accrued during that window, not all-day usage. This
+     * relies on Android's UsageStatsManager.queryUsageStats() clipping stats
+     * to the requested [start, end] range at the OS level, so no background
+     * polling loop is needed beyond the existing periodic block-check that
+     * already runs (ROUTINE_POLL_INTERVAL_MS in AppBlockerService). If you
+     * previously saw limits trigger as if they were full-day, that was a
+     * separate bug in ScreenUsageHelper that double-counted the in-progress
+     * foreground session — fixed by removing the redundant event-based
+     * overlay (queryUsageStats already reflects live foreground time).
+     */
     fun getUsageMs(context: Context, packageName: String): Long {
         val now = System.currentTimeMillis()
         val sessions = getActiveSessions().filter { it.endTime == 0L || now < it.endTime }
