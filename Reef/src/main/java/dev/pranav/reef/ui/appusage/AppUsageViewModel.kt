@@ -214,7 +214,7 @@ class AppUsageViewModel(
         }
     }
 
-        private fun processUsageMap(usageMap: Map<String, Long>): List<AppUsageStats> {
+            private fun processUsageMap(usageMap: Map<String, Long>): List<AppUsageStats> {
         val intent = android.content.Intent(android.content.Intent.ACTION_MAIN).apply { addCategory(android.content.Intent.CATEGORY_HOME) }
         val defaultLauncher = packageManager.resolveActivity(intent, android.content.pm.PackageManager.MATCH_DEFAULT_ONLY)?.activityInfo?.packageName
 
@@ -228,13 +228,13 @@ class AppUsageViewModel(
                 try {
                     val info = packageManager.getApplicationInfo(pkg, 0)
                     val label = packageManager.getApplicationLabel(info).toString()
-                    val icon = packageManager.getApplicationIcon(info)
-                    AppUsageStats(info, label, icon, usage)
+                    AppUsageStats(info, label, usage)
                 } catch (e: Exception) {
                     null
                 }
             }
     }
+
 
 
     private fun calculateTimeRange(): Pair<Long, Long> {
