@@ -182,29 +182,34 @@ class AppUsageViewModel(
 
     private fun filterAndSortData() {
         viewModelScope.launch(Dispatchers.IO) {
-            val (startTime, endTime) = calculateTimeRange()
+            try {
+                val (startTime, endTime) = calculateTimeRange()
 
-            val stats =
-                if (_selectedDayTimestamp.value != null || selectedRange == UsageRange.TODAY) {
-                    processUsageMap(
-                        ScreenUsageHelper.calculateUsage(
-                            context, usageStatsManager,
-                            startTime,
-                            endTime
+                val stats =
+                    if (_selectedDayTimestamp.value != null || selectedRange == UsageRange.TODAY) {
+                        processUsageMap(
+                            ScreenUsageHelper.calculateUsage(
+                                context, usageStatsManager,
+                                startTime,
+                                endTime
+                            )
                         )
-                    )
-                } else {
-                    allAppStats
+                    } else {
+                        allAppStats
+                    }
+
+                val sortedStats = when (selectedSort) {
+                    UsageSortOrder.TIME_DESC -> stats.sortedByDescending { it.totalTime }
+                    UsageSortOrder.NAME_ASC -> stats.sortedBy { it.label }
                 }
 
-            val sortedStats = when (selectedSort) {
-                UsageSortOrder.TIME_DESC -> stats.sortedByDescending { it.totalTime }
-                UsageSortOrder.NAME_ASC -> stats.sortedBy { it.label }
-            }
-
-            withContext(Dispatchers.Main) {
-                _totalUsage.longValue = sortedStats.sumOf { it.totalTime }.coerceAtLeast(1L)
-                _appUsageStats.value = sortedStats
+                withContext(Dispatchers.Main) {
+                    _totalUsage.longValue = sortedStats.sumOf { it.totalTime }.coerceAtLeast(1L)
+                    _appUsageStats.value = sortedStats
+                }
+            } catch (_: Exception) {
+                // Never leave the UI silently stuck at the default 1L total
+                // because one unexpected exception killed this coroutine.
             }
         }
     }
@@ -226,17 +231,22 @@ class AppUsageViewModel(
                     }
                     val label = packageManager.getApplicationLabel(info).toString()
 
-                    launcherApps.getApplicationInfo(
-                        pkg,
-                        0, Process.myUserHandle()
-                    )?.let { info ->
-                        AppUsageStats(
-                            applicationInfo = info,
-                            label = label,
-                            totalTime = totalTime
-                        )
-                    }
-                } catch (_: PackageManager.NameNotFoundException) {
+                    // Use PackageManager's ApplicationInfo directly instead of
+                    // LauncherApps — LauncherApps.getApplicationInfo() can throw
+                    // SecurityException/IllegalArgumentException on some OEM
+                    // ROMs (e.g. MIUI/HyperOS) for packages outside the strict
+                    // launcher/profile context, which silently killed this whole
+                    // coroutine and zeroed out the displayed total.
+                    AppUsageStats(
+                        applicationInfo = info,
+                        label = label,
+                        totalTime = totalTime
+                    )
+                } catch (_: Exception) {
+                    // Catch-all: a single bad package must never abort the
+                    // whole list (was previously only catching
+                    // NameNotFoundException, letting other exceptions escape
+                    // and silently kill filterAndSortData's coroutine).
                     null
                 }
             }
