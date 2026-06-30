@@ -40,7 +40,9 @@ object ScreenUsageHelper {
         targetPackage: String? = null
     ): Map<String, Long> = fetchUsageInMs(usageStatsManager, startTime, endTime, targetPackage)
 
-    fun fetchUsageInMs(
+    
+
+fun fetchUsageInMs(
     usageStatsManager: UsageStatsManager,
     startTime: Long,
     endTime: Long,
@@ -62,20 +64,32 @@ object ScreenUsageHelper {
         val type = event.eventType
         val timestamp = event.timeStamp
 
-        if (type == UsageEvents.Event.ACTIVITY_RESUMED) {
+        // 1 = MOVE_TO_FOREGROUND
+        if (type == 1) { 
             lastEventTimes[pkg] = timestamp
             isForeground[pkg] = true
-        } else if (type == UsageEvents.Event.ACTIVITY_PAUSED || type == 26) { // 26 = DEVICE_SHUTDOWN
+            
+        // 2 = MOVE_TO_BACKGROUND, 26 = DEVICE_SHUTDOWN
+        } else if (type == 2 || type == 26) { 
             if (isForeground[pkg] == true) {
                 val start = lastEventTimes[pkg] ?: startTime
                 usageMap[pkg] = (usageMap[pkg] ?: 0L) + (timestamp - start)
-            } else {
-                // Rollover session: started before startTime
-                usageMap[pkg] = (usageMap[pkg] ?: 0L) + (timestamp - startTime)
+                isForeground[pkg] = false
             }
-            isForeground[pkg] = false
         }
     }
+
+    // Ongoing session: still in foreground at endTime
+    for ((pkg, inForeground) in isForeground) {
+        if (inForeground) {
+            val start = lastEventTimes[pkg] ?: startTime
+            usageMap[pkg] = (usageMap[pkg] ?: 0L) + (endTime - start)
+        }
+    }
+
+    return usageMap
+}
+
 
     // Ongoing session: still in foreground at endTime
     for ((pkg, inForeground) in isForeground) {
