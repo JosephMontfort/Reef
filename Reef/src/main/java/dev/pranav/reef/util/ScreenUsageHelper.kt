@@ -39,27 +39,52 @@ object ScreenUsageHelper {
     ): Map<String, Long> = fetchUsageInMs(usageStatsManager, startTime, endTime, targetPackage)
 
     fun fetchUsageInMs(
-        usm: UsageStatsManager,
-        start: Long,
-        end: Long,
-        targetPackage: String? = null
-    ): Map<String, Long> {
-        if (end <= start) return emptyMap()
+    usageStatsManager: UsageStatsManager,
+    startTime: Long,
+    endTime: Long,
+    targetPackage: String? = null
+): Map<String, Long> {
+    val usageMap = mutableMapOf<String, Long>()
+    val events = usageStatsManager.queryEvents(startTime, endTime)
+    val event = UsageEvents.Event()
+    
+    val lastEventTimes = mutableMapOf<String, Long>()
+    val isForeground = mutableMapOf<String, Boolean>()
 
-        val result = mutableMapOf<String, Long>()
-        runCatching {
-            val statsMap = usm.queryAndAggregateUsageStats(start, end)
-            statsMap.forEach { (pkg, stat) ->
-                if (targetPackage != null && pkg != targetPackage) return@forEach
-                // totalTimeVisible (API 29+) avoids double-counting overlapping
-                // windows/activities — same field Digital Wellbeing reads.
-                val time = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q)
-                    stat.totalTimeVisible else stat.totalTimeInForeground
-                if (time > 0) result[pkg] = time
+    while (events.hasNextEvent()) {
+        events.getNextEvent(event)
+        val pkg = event.packageName
+        
+        if (targetPackage != null && pkg != targetPackage) continue
+
+        val type = event.eventType
+        val timestamp = event.timeStamp
+
+        if (type == UsageEvents.Event.ACTIVITY_RESUMED) {
+            lastEventTimes[pkg] = timestamp
+            isForeground[pkg] = true
+        } else if (type == UsageEvents.Event.ACTIVITY_PAUSED || type == 26) { // 26 = DEVICE_SHUTDOWN
+            if (isForeground[pkg] == true) {
+                val start = lastEventTimes[pkg] ?: startTime
+                usageMap[pkg] = (usageMap[pkg] ?: 0L) + (timestamp - start)
+            } else {
+                // Rollover session: started before startTime
+                usageMap[pkg] = (usageMap[pkg] ?: 0L) + (timestamp - startTime)
             }
+            isForeground[pkg] = false
         }
-        return result.filterValues { it > 0L }
     }
+
+    // Ongoing session: still in foreground at endTime
+    for ((pkg, inForeground) in isForeground) {
+        if (inForeground) {
+            val start = lastEventTimes[pkg] ?: startTime
+            usageMap[pkg] = (usageMap[pkg] ?: 0L) + (endTime - start)
+        }
+    }
+
+    return usageMap
+}
 
     fun fetchAppUsageTodayTillNow(usm: UsageStatsManager): Map<String, Long> {
         val cal = Calendar.getInstance().apply {
