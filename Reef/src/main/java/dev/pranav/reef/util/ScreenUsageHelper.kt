@@ -1,14 +1,20 @@
 package dev.pranav.reef.util
 
+import android.app.usage.UsageEvents
 import android.app.usage.UsageStatsManager
 import android.content.Context
-import android.os.Build
 import java.util.Calendar
 
 /**
- * Usage tracking using the same approach as Digital Wellbeing:
- * queryUsageStats(INTERVAL_BEST) for aggregate totals, with an event-based
- * overlay to catch the currently-open app that hasn't received a PAUSE yet.
+ * Usage tracking via raw queryEvents() — the same primitive Digital Wellbeing
+ * uses internally. queryUsageStats(INTERVAL_*) is NOT used here: it returns
+ * cumulative totals for whatever bucket (daily/weekly/monthly) the system
+ * has on hand, and that bucket is NOT clipped to the [start, end] you pass
+ * in — querying "today" can silently return a whole week's total. The only
+ * way to get an accurate, precisely-windowed duration is to walk the raw
+ * ACTIVITY_RESUMED / ACTIVITY_PAUSED (and STOPPED) event pairs ourselves and
+ * sum the time each package was actually in the foreground within the
+ * requested window.
  */
 object ScreenUsageHelper {
 
@@ -26,19 +32,48 @@ object ScreenUsageHelper {
         end: Long,
         targetPackage: String? = null
     ): Map<String, Long> {
-        val result = mutableMapOf<String, Long>()
+        if (end <= start) return emptyMap()
 
-        // queryUsageStats(INTERVAL_BEST) already reflects live foreground time
-        // for the currently-open app on modern Android (this is what Digital
-        // Wellbeing reads from too) — no separate event-based overlay needed.
-        // Adding one on top double-counts the in-progress session.
+        val result = mutableMapOf<String, Long>()
+        // Tracks the resume timestamp for each package currently in foreground,
+        // clamped to `start` so a session that began before the window still
+        // only counts the portion inside [start, end].
+        val openSessions = mutableMapOf<String, Long>()
+
         runCatching {
-            val stats = usm.queryUsageStats(UsageStatsManager.INTERVAL_BEST, start, end)
-            stats?.forEach { stat ->
-                if (targetPackage != null && stat.packageName != targetPackage) return@forEach
-                val time = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q)
-                    stat.totalTimeVisible else stat.totalTimeInForeground
-                if (time > 0) result[stat.packageName] = (result[stat.packageName] ?: 0L) + time
+            val events = usm.queryEvents(start, end)
+            val event = UsageEvents.Event()
+
+            while (events.hasNextEvent()) {
+                events.getNextEvent(event)
+                val pkg = event.packageName ?: continue
+                if (targetPackage != null && pkg != targetPackage) continue
+
+                when (event.eventType) {
+                    UsageEvents.Event.ACTIVITY_RESUMED -> {
+                        openSessions[pkg] = event.timeStamp.coerceAtLeast(start)
+                    }
+
+                    UsageEvents.Event.ACTIVITY_PAUSED,
+                    UsageEvents.Event.ACTIVITY_STOPPED -> {
+                        val resumeTime = openSessions.remove(pkg)
+                        if (resumeTime != null) {
+                            val duration = (event.timeStamp.coerceAtMost(end) - resumeTime)
+                            if (duration > 0) {
+                                result[pkg] = (result[pkg] ?: 0L) + duration
+                            }
+                        }
+                    }
+                }
+            }
+
+            // Any package still "open" at the end of the window (app is
+            // currently in foreground, hasn't paused yet) — count up to `end`.
+            openSessions.forEach { (pkg, resumeTime) ->
+                val duration = end - resumeTime
+                if (duration > 0) {
+                    result[pkg] = (result[pkg] ?: 0L) + duration
+                }
             }
         }
 
