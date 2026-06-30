@@ -214,43 +214,28 @@ class AppUsageViewModel(
         }
     }
 
-    private fun processUsageMap(usageMap: Map<String, Long>): List<AppUsageStats> {
+        private fun processUsageMap(usageMap: Map<String, Long>): List<AppUsageStats> {
+        val intent = android.content.Intent(android.content.Intent.ACTION_MAIN).apply { addCategory(android.content.Intent.CATEGORY_HOME) }
+        val defaultLauncher = packageManager.resolveActivity(intent, android.content.pm.PackageManager.MATCH_DEFAULT_ONLY)?.activityInfo?.packageName
+
         return usageMap
-            .filter { it.value > 5000 && it.key != packageName && !Whitelist.isWhitelisted(it.key) }
-            .mapNotNull { (pkg, totalTime) ->
+            .filter { 
+                it.value > 5000 && 
+                it.key != "com.android.systemui" && 
+                it.key != defaultLauncher 
+            }
+            .mapNotNull { (pkg, usage) ->
                 try {
-                    if (packageManager.getLaunchIntentForPackage(pkg) == null) return@mapNotNull null
-
-                    val info = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                        packageManager.getApplicationInfo(
-                            pkg,
-                            PackageManager.ApplicationInfoFlags.of(0)
-                        )
-                    } else {
-                        packageManager.getApplicationInfo(pkg, 0)
-                    }
+                    val info = packageManager.getApplicationInfo(pkg, 0)
                     val label = packageManager.getApplicationLabel(info).toString()
-
-                    // Use PackageManager's ApplicationInfo directly instead of
-                    // LauncherApps — LauncherApps.getApplicationInfo() can throw
-                    // SecurityException/IllegalArgumentException on some OEM
-                    // ROMs (e.g. MIUI/HyperOS) for packages outside the strict
-                    // launcher/profile context, which silently killed this whole
-                    // coroutine and zeroed out the displayed total.
-                    AppUsageStats(
-                        applicationInfo = info,
-                        label = label,
-                        totalTime = totalTime
-                    )
-                } catch (_: Exception) {
-                    // Catch-all: a single bad package must never abort the
-                    // whole list (was previously only catching
-                    // NameNotFoundException, letting other exceptions escape
-                    // and silently kill filterAndSortData's coroutine).
+                    val icon = packageManager.getApplicationIcon(info)
+                    AppUsageStats(info, label, icon, usage)
+                } catch (e: Exception) {
                     null
                 }
             }
     }
+
 
     private fun calculateTimeRange(): Pair<Long, Long> {
         val now = System.currentTimeMillis()
