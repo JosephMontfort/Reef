@@ -168,11 +168,17 @@ class MainActivity: ComponentActivity() {
 
             var dailyUsageText by remember { mutableStateOf("0m today") }
 
-            LaunchedEffect(Unit) {
+                        LaunchedEffect(Unit) {
                 kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
                     val usageText = try {
                         val todayUsage = ScreenUsageHelper.fetchAppUsageTodayTillNow(usageStatsManager)
-                        val totalUsageMinutes = todayUsage.values.sum() / 60
+                        
+                        val intent = Intent(Intent.ACTION_MAIN).apply { addCategory(Intent.CATEGORY_HOME) }
+                        val defaultLauncher = packageManager.resolveActivity(intent, android.content.pm.PackageManager.MATCH_DEFAULT_ONLY)?.activityInfo?.packageName
+                        val exclusions = listOfNotNull("com.android.systemui", defaultLauncher)
+                        
+                        val totalUsageMinutes = todayUsage.filterKeys { it !in exclusions }.values.sum() / 60
+                        
                         val hours = totalUsageMinutes / 60
                         val minutes = totalUsageMinutes % 60
                         when {
@@ -189,6 +195,7 @@ class MainActivity: ComponentActivity() {
                     }
                 }
             }
+
 
             ReefTheme {
                 Scaffold(
