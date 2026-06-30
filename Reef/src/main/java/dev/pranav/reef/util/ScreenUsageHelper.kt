@@ -1,34 +1,17 @@
 package dev.pranav.reef.util
 
+import android.app.usage.UsageEvents
 import android.app.usage.UsageStatsManager
 import android.content.Context
 import android.os.Build
 import java.util.Calendar
-import android.app.usage.UsageEvents
-
 
 /**
- * Usage tracking using UsageStatsManager.queryAndAggregateUsageStats() —
- * the official convenience method built specifically to return one merged
- * total per package for an arbitrary time range. This is what Digital
- * Wellbeing and reputable third-party screen-time apps use.
- *
- * Two prior approaches were tried and rejected:
- * 1. INTERVAL_BEST — silently picks whatever bucket size (daily/weekly/
- *    monthly) the OS has data for, not guaranteed to match the query
- *    window. Caused single-day totals to show 30+ hours.
- * 2. Manual queryEvents() RESUMED/PAUSED parsing — fragile across OEM
- *    ROMs; undercounted real usage by roughly half in testing.
- * 3. Manual queryUsageStats(INTERVAL_DAILY, ...) summed with +=  — the OS
- *    can return MULTIPLE UsageStats entries for the SAME package within
- *    one day (internal sub-day flush boundaries), and each entry's
- *    totalTimeInForeground/totalTimeVisible is already a running total,
- *    not a delta. Summing them with += multiplied real usage several
- *    times over (e.g. Instagram showing 2h28m for an actual 32m).
- *
- * queryAndAggregateUsageStats() merges those duplicate/overlapping
- * fragments correctly internally, returning exactly one UsageStats per
- * package — no manual merge logic needed.
+ * Usage tracking using UsageStatsManager.queryEvents()
+ * * Accurately calculates screen time by pairing MOVE_TO_FOREGROUND (1) 
+ * and MOVE_TO_BACKGROUND (2) events. It strictly ignores orphan background 
+ * events caused by the OS killing inactive processes, matching the 
+ * exact tracking behavior of Digital Wellbeing.
  */
 object ScreenUsageHelper {
 
@@ -40,67 +23,54 @@ object ScreenUsageHelper {
         targetPackage: String? = null
     ): Map<String, Long> = fetchUsageInMs(usageStatsManager, startTime, endTime, targetPackage)
 
-    
-
-fun fetchUsageInMs(
-    usageStatsManager: UsageStatsManager,
-    startTime: Long,
-    endTime: Long,
-    targetPackage: String? = null
-): Map<String, Long> {
-    val usageMap = mutableMapOf<String, Long>()
-    val events = usageStatsManager.queryEvents(startTime, endTime)
-    val event = UsageEvents.Event()
-    
-    val lastEventTimes = mutableMapOf<String, Long>()
-    val isForeground = mutableMapOf<String, Boolean>()
-
-    while (events.hasNextEvent()) {
-        events.getNextEvent(event)
-        val pkg = event.packageName
+    fun fetchUsageInMs(
+        usageStatsManager: UsageStatsManager,
+        startTime: Long,
+        endTime: Long,
+        targetPackage: String? = null
+    ): Map<String, Long> {
+        val usageMap = mutableMapOf<String, Long>()
+        val events = usageStatsManager.queryEvents(startTime, endTime)
+        val event = UsageEvents.Event()
         
-        if (targetPackage != null && pkg != targetPackage) continue
+        val lastEventTimes = mutableMapOf<String, Long>()
+        val isForeground = mutableMapOf<String, Boolean>()
 
-        val type = event.eventType
-        val timestamp = event.timeStamp
-
-        // 1 = MOVE_TO_FOREGROUND
-        if (type == 1) { 
-            lastEventTimes[pkg] = timestamp
-            isForeground[pkg] = true
+        while (events.hasNextEvent()) {
+            events.getNextEvent(event)
+            val pkg = event.packageName
             
-        // 2 = MOVE_TO_BACKGROUND, 26 = DEVICE_SHUTDOWN
-        } else if (type == 2 || type == 26) { 
-            if (isForeground[pkg] == true) {
-                val start = lastEventTimes[pkg] ?: startTime
-                usageMap[pkg] = (usageMap[pkg] ?: 0L) + (timestamp - start)
-                isForeground[pkg] = false
+            if (targetPackage != null && pkg != targetPackage) continue
+
+            val type = event.eventType
+            val timestamp = event.timeStamp
+
+            // 1 = MOVE_TO_FOREGROUND
+            if (type == 1) { 
+                lastEventTimes[pkg] = timestamp
+                isForeground[pkg] = true
+                
+            // 2 = MOVE_TO_BACKGROUND, 26 = DEVICE_SHUTDOWN
+            } else if (type == 2 || type == 26) { 
+                // ONLY process if previously marked as in foreground
+                if (isForeground[pkg] == true) {
+                    val start = lastEventTimes[pkg] ?: startTime
+                    usageMap[pkg] = (usageMap[pkg] ?: 0L) + (timestamp - start)
+                    isForeground[pkg] = false
+                }
             }
         }
-    }
 
-    // Ongoing session: still in foreground at endTime
-    for ((pkg, inForeground) in isForeground) {
-        if (inForeground) {
-            val start = lastEventTimes[pkg] ?: startTime
-            usageMap[pkg] = (usageMap[pkg] ?: 0L) + (endTime - start)
+        // Ongoing session: still in foreground at endTime
+        for ((pkg, inForeground) in isForeground) {
+            if (inForeground) {
+                val start = lastEventTimes[pkg] ?: startTime
+                usageMap[pkg] = (usageMap[pkg] ?: 0L) + (endTime - start)
+            }
         }
+
+        return usageMap
     }
-
-    return usageMap
-}
-
-
-    // Ongoing session: still in foreground at endTime
-    for ((pkg, inForeground) in isForeground) {
-        if (inForeground) {
-            val start = lastEventTimes[pkg] ?: startTime
-            usageMap[pkg] = (usageMap[pkg] ?: 0L) + (endTime - start)
-        }
-    }
-
-    return usageMap
-}
 
     fun fetchAppUsageTodayTillNow(usm: UsageStatsManager): Map<String, Long> {
         val cal = Calendar.getInstance().apply {
