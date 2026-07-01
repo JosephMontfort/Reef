@@ -43,14 +43,13 @@ object UsageTracker {
 
             if (usageMs >= limitMs) {
                 android.util.Log.d("UsageTracker", "BLOCKING $packageName due to routine limit")
+                NotificationHelper.cancelReminderNotification(context, packageName)
                 return BlockReason.ROUTINE_LIMIT
             }
         }
 
-        // Whitelist bypasses daily limits only
-        if (Whitelist.isWhitelisted(packageName)) return BlockReason.NONE
-
-        // Check daily limits
+        // Check daily limits — these apply regardless of whitelist status
+        // (whitelist only bypasses focus-mode blocking, not explicit time limits)
         if (AppLimits.hasLimit(packageName)) {
             val dailyUsage = getDailyUsage(packageName, usm)
             val limit = AppLimits.getLimit(packageName)
@@ -64,9 +63,13 @@ object UsageTracker {
             }
 
             if (dailyUsage >= limit) {
+                NotificationHelper.cancelReminderNotification(context, packageName)
                 return BlockReason.DAILY_LIMIT
             }
         }
+
+        // Whitelist bypasses focus-mode blocking only
+        if (Whitelist.isWhitelisted(packageName)) return BlockReason.NONE
 
         return BlockReason.NONE
     }

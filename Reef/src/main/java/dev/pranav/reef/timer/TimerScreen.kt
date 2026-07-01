@@ -4,6 +4,8 @@ import android.content.Intent
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.draw.scale
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -47,6 +49,7 @@ import androidx.navigation.compose.rememberNavController
 import dev.pranav.reef.R
 import dev.pranav.reef.navigation.Screen
 import androidx.compose.material.icons.automirrored.rounded.TrendingUp
+import dev.pranav.reef.ui.Typography
 import dev.pranav.reef.ui.Typography.DMSerif
 import dev.pranav.reef.util.formatTime
 import dev.pranav.reef.util.WatchdogManager
@@ -84,6 +87,28 @@ fun TimerContent(
 ) {
     val showRunningView = isTimerRunning || isPaused
     var selectedMode by remember { mutableIntStateOf(0) }
+
+    // Congrats screen: shown when timer naturally completes (not cancelled)
+    // Only if session ran for more than 60 seconds
+    var showCongrats by remember { mutableStateOf(false) }
+    var wasRunning by remember { mutableStateOf(false) }
+    val sessionStartEpoch = remember { prefs.getLong("session_start_epoch", 0L) }
+
+    LaunchedEffect(isTimerRunning, isPaused) {
+        val justCompleted = wasRunning && !isTimerRunning && !isPaused
+        if (justCompleted) {
+            val sessionDurationMs = System.currentTimeMillis() - sessionStartEpoch
+            if (sessionDurationMs >= 60_000L) {
+                showCongrats = true
+            }
+        }
+        wasRunning = isTimerRunning
+    }
+
+    if (showCongrats) {
+        CongratsScreen(onDismiss = { showCongrats = false })
+        return
+    }
 
     val scrollBehavior =
         TopAppBarDefaults.exitUntilCollapsedScrollBehavior(rememberTopAppBarState())
@@ -877,14 +902,28 @@ fun RunningTimerView(
                 fontFamily = DMSerif,
             )
 
-            Text(
-                text = if (isCountUpMode && !isCountUpBreak) formatTime(state.focusTimeElapsed) else timeLeft,
-                fontWeight = FontWeight.Bold,
-                textAlign = TextAlign.Center,
-                fontFamily = DMSerif,
-                fontSize = 88.sp,
-                color = if (isBreak) MaterialTheme.colorScheme.tertiary else MaterialTheme.colorScheme.onSurface
-            )
+            BoxWithConstraints(
+                contentAlignment = Alignment.Center,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                val timeText = if (isCountUpMode && !isCountUpBreak) formatTime(state.focusTimeElapsed) else timeLeft
+                // Scale down font when showing H:MM:SS (7 chars) vs MM:SS (5 chars)
+                val baseFontSize = (maxWidth.value * 0.22f).coerceIn(48f, 88f)
+                val scaledFontSize = when {
+                    timeText.length >= 8 -> baseFontSize * 0.72f  // H:MM:SS
+                    timeText.length >= 7 -> baseFontSize * 0.78f
+                    else -> baseFontSize
+                }.sp
+
+                Text(
+                    text = timeText,
+                    fontWeight = FontWeight.Bold,
+                    textAlign = TextAlign.Center,
+                    fontFamily = DMSerif,
+                    fontSize = scaledFontSize,
+                    color = if (isBreak) MaterialTheme.colorScheme.tertiary else MaterialTheme.colorScheme.onSurface
+                )
+            }
 
             if (isCountUpMode && !isCountUpBreak) {
                 Spacer(modifier = Modifier.height(16.dp))
@@ -1073,6 +1112,7 @@ fun RunningTimerActions(
         )
     }
 
+    val haptic = androidx.compose.ui.platform.LocalHapticFeedback.current
     Column(modifier = modifier, verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Row(
             horizontalArrangement = Arrangement.spacedBy(2.dp),
@@ -1082,7 +1122,10 @@ fun RunningTimerActions(
             if (!isBreak) {
                 IconToggleButton(
                     checked = isPaused,
-                    onCheckedChange = { if (isPaused) onResume() else onPause() },
+                    onCheckedChange = {
+                        haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.LongPress)
+                        if (isPaused) onResume() else onPause()
+                    },
                     shapes = IconButtonDefaults.toggleableShapes(
                         shape = if (isPaused) IconButtonDefaults.largeSquareShape
                         else IconButtonDefaults.extraLargeSquareShape,
@@ -1122,6 +1165,7 @@ fun RunningTimerActions(
 
                     Button(
                         onClick = {
+                            haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.LongPress)
                             when {
                                 inGrace -> onCancel()
                                 preventStop && !isBreak -> showPreventStopDialog = true
@@ -1221,3 +1265,128 @@ fun RunningTimerScreenPreview() {
         )
     }
 }
+
+@OptIn(ExperimentalMaterial3ExpressiveApi::class)
+@Composable
+fun CongratsScreen(onDismiss: () -> Unit) {
+    val haptic = androidx.compose.ui.platform.LocalHapticFeedback.current
+
+    // Confetti particles
+    data class Particle(
+        val x: Float, val y: Float,
+        val vx: Float, val vy: Float,
+        val color: androidx.compose.ui.graphics.Color,
+        val size: Float, val rotation: Float, val rotationSpeed: Float
+    )
+
+    val particleColors = listOf(
+        MaterialTheme.colorScheme.primary,
+        MaterialTheme.colorScheme.secondary,
+        MaterialTheme.colorScheme.tertiary,
+        MaterialTheme.colorScheme.primaryContainer,
+        MaterialTheme.colorScheme.secondaryContainer
+    )
+
+    val particles = remember {
+        List(60) {
+            Particle(
+                x = (0.1f..0.9f).random(),
+                y = (-0.2f..0.2f).random(),
+                vx = (-0.003f..0.003f).random(),
+                vy = (0.003f..0.008f).random(),
+                color = particleColors.random(),
+                size = (6f..14f).random(),
+                rotation = (0f..360f).random(),
+                rotationSpeed = (-5f..5f).random()
+            )
+        }
+    }
+
+    var particleStates by remember { mutableStateOf(particles) }
+    var tick by remember { mutableIntStateOf(0) }
+
+    LaunchedEffect(Unit) {
+        haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.LongPress)
+        kotlinx.coroutines.delay(50)
+        haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.LongPress)
+        while (true) {
+            kotlinx.coroutines.delay(16)
+            tick++
+            particleStates = particleStates.map { p ->
+                p.copy(x = p.x + p.vx, y = p.y + p.vy, rotation = p.rotation + p.rotationSpeed)
+            }
+        }
+    }
+
+    val scale by animateFloatAsState(
+        targetValue = 1f,
+        animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessLow),
+        label = "scale"
+    )
+    var visible by remember { mutableStateOf(false) }
+    LaunchedEffect(Unit) { visible = true }
+    val alpha by animateFloatAsState(
+        targetValue = if (visible) 1f else 0f,
+        animationSpec = tween(400),
+        label = "alpha"
+    )
+
+    Box(
+        modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.surface),
+        contentAlignment = Alignment.Center
+    ) {
+        // Draw confetti
+        Canvas(modifier = Modifier.fillMaxSize()) {
+            particleStates.forEach { p ->
+                if (p.y < 1.1f) {
+                    drawRect(
+                        color = p.color.copy(alpha = (1f - p.y).coerceIn(0f, 0.9f)),
+                        topLeft = androidx.compose.ui.geometry.Offset(
+                            p.x * size.width,
+                            p.y * size.height
+                        ),
+                        size = androidx.compose.ui.geometry.Size(p.size, p.size * 0.6f),
+                    )
+                }
+            }
+        }
+
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(16.dp),
+            modifier = Modifier.alpha(alpha).scale(scale).padding(32.dp)
+        ) {
+            Text(
+                text = "🎉",
+                fontSize = 72.sp
+            )
+            Text(
+                text = stringResource(R.string.focus_session_complete),
+                style = MaterialTheme.typography.headlineLargeEmphasized,
+                fontFamily = Typography.DMSerif,
+                textAlign = TextAlign.Center,
+                color = MaterialTheme.colorScheme.primary
+            )
+            Text(
+                text = stringResource(R.string.focus_session_complete_message),
+                style = MaterialTheme.typography.bodyLarge,
+                textAlign = TextAlign.Center,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            Spacer(Modifier.height(8.dp))
+            Button(
+                onClick = {
+                    haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.LongPress)
+                    onDismiss()
+                },
+                shapes = ButtonDefaults.shapes(),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text(stringResource(R.string.done), style = MaterialTheme.typography.titleMedium)
+            }
+        }
+    }
+}
+
+private fun ClosedFloatingPointRange<Float>.random(): Float =
+    start + (endInclusive - start) * kotlin.random.Random.nextFloat()

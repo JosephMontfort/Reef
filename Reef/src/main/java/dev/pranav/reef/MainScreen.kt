@@ -310,21 +310,15 @@ private fun HoldToFocusAnchor(onProgressChanged: (Float) -> Unit, onTrigger: () 
         label = "core_color"
     )
 
-    LaunchedEffect(progressAnim.value) {
-        onProgressChanged(progressAnim.value)
-        if (progressAnim.value >= 1f) {
-            isPressing = false
-            onTrigger()
-            progressAnim.snapTo(0f)
-        }
-    }
+    val haptic = androidx.compose.ui.platform.LocalHapticFeedback.current
 
     LaunchedEffect(isPressing) {
         if (isPressing) {
+            haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.LongPress)
             progressAnim.animateTo(
                 targetValue = 1f,
                 animationSpec = tween(
-                    durationMillis = 750, // 3/4 of original 1000ms
+                    durationMillis = 750,
                     easing = CubicBezierEasing(0.4f, 0.0f, 0.2f, 1f)
                 )
             )
@@ -335,6 +329,16 @@ private fun HoldToFocusAnchor(onProgressChanged: (Float) -> Unit, onTrigger: () 
                     animationSpec = spring(dampingRatio = Spring.DampingRatioNoBouncy, stiffness = Spring.StiffnessHigh)
                 )
             }
+        }
+    }
+
+    LaunchedEffect(progressAnim.value) {
+        onProgressChanged(progressAnim.value)
+        if (progressAnim.value >= 1f) {
+            haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.LongPress)
+            isPressing = false
+            onTrigger()
+            progressAnim.snapTo(0f)
         }
     }
 

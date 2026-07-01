@@ -1610,8 +1610,8 @@ private fun loadAccessibleApps(context: android.content.Context): List<Pair<Stri
     return pm.getInstalledApplications(0)
         .filter { it.packageName != context.packageName }
         .filter { it.packageName in accessible }
-        .sortedBy { it.name }
         .map { it.packageName to it.loadLabel(pm).toString() }
+        .sortedBy { it.second.lowercase() }
 }
 
 private fun formatTime(time: LocalTime): String {
@@ -1668,6 +1668,16 @@ private fun saveRoutine(
     if (name.trim().isEmpty()) {
         onError(context.getString(R.string.enter_routine_name_error))
         return false
+    }
+
+    // Time window validation for DAILY/WEEKLY
+    if (scheduleType != RoutineSchedule.ScheduleType.MANUAL) {
+        val startTotalMins = selectedTime.hour * 60 + selectedTime.minute
+        val endTotalMins = selectedEndTime.hour * 60 + selectedEndTime.minute
+        if (endTotalMins <= startTotalMins) {
+            onError(context.getString(R.string.routine_end_time_before_start_error))
+            return false
+        }
     }
 
     val schedule = RoutineSchedule(

@@ -456,4 +456,7 @@
     <string name="start_count_up">Start Counting</string>
     <string name="earned_break_budget">Break budget: %s earned</string>
     <string name="redeem_break">Take Break</string>
+    <string name="routine_end_time_before_start_error">End time must be after start time</string>
+    <string name="app_will_be_blocked_in_seconds">%1$s will be blocked in %2$d seconds</string>
+    <string name="done">Done</string>
 </resources>

@@ -138,25 +138,30 @@ object NotificationHelper {
             packageName
         }
 
-        val minutes = (timeRemaining / 60000).toInt()
+        val totalSeconds = (timeRemaining / 1000).toInt().coerceAtLeast(0)
+        val minutes = totalSeconds / 60
+        val seconds = totalSeconds % 60
+
+        val timeText = when {
+            minutes > 0 -> context.resources.getQuantityString(
+                R.plurals.app_will_be_blocked_in, minutes, appName, minutes
+            )
+            else -> context.getString(R.string.app_will_be_blocked_in_seconds, appName, seconds)
+        }
 
         val intent = Intent(context, MainActivity::class.java)
         val pendingIntent = PendingIntent.getActivity(
             context, 0, intent, PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
         )
 
+        val notifId = REMINDER_NOTIFICATION_ID + packageName.hashCode()
+
         val builder = NotificationCompat.Builder(context, REMINDER_CHANNEL_ID)
             .setContentTitle(context.getString(R.string.time_limit_reminder))
-            .setContentText(
-                context.resources.getQuantityString(
-                    R.plurals.app_will_be_blocked_in,
-                    minutes,
-                    appName,
-                    minutes
-                )
-            )
+            .setContentText(timeText)
             .setSmallIcon(R.drawable.ic_launcher_foreground)
             .setAutoCancel(true)
+            .setOnlyAlertOnce(true)
             .setContentIntent(pendingIntent)
             .setPriority(NotificationCompat.PRIORITY_HIGH)
 
@@ -165,10 +170,12 @@ object NotificationHelper {
                 Manifest.permission.POST_NOTIFICATIONS
             ) == PackageManager.PERMISSION_GRANTED
         ) {
-            NotificationManagerCompat.from(context).notify(
-                REMINDER_NOTIFICATION_ID + packageName.hashCode(),
-                builder.build()
-            )
+            NotificationManagerCompat.from(context).notify(notifId, builder.build())
         }
+    }
+
+    fun cancelReminderNotification(context: Context, packageName: String) {
+        NotificationManagerCompat.from(context)
+            .cancel(REMINDER_NOTIFICATION_ID + packageName.hashCode())
     }
 }
