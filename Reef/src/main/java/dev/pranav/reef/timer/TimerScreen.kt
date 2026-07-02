@@ -13,6 +13,13 @@ import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.snapping.rememberSnapFlingBehavior
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.runtime.derivedStateOf
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
@@ -92,15 +99,23 @@ fun TimerContent(
     var selectedMode by remember { mutableIntStateOf(0) }
 
     // Congrats screen: shown when timer naturally completes (not cancelled)
-    // Only if session ran for more than 60 seconds
+    // Only if session ran for at least 60 seconds. session_start_epoch is
+    // re-read fresh at the moment of completion (not remembered at first
+    // composition) since the screen may already be composed from a stale
+    // previous session before a new one starts.
     var showCongrats by remember { mutableStateOf(false) }
     var wasRunning by remember { mutableStateOf(false) }
-    val sessionStartEpoch = remember { prefs.getLong("session_start_epoch", 0L) }
+    var sessionStartAtRunStart by remember { mutableStateOf(0L) }
 
     LaunchedEffect(isTimerRunning, isPaused) {
+        if (isTimerRunning && !wasRunning) {
+            // Session just started (or resumed from a fresh start) — capture
+            // the authoritative start time now.
+            sessionStartAtRunStart = prefs.getLong("session_start_epoch", System.currentTimeMillis())
+        }
         val justCompleted = wasRunning && !isTimerRunning && !isPaused
         if (justCompleted) {
-            val sessionDurationMs = System.currentTimeMillis() - sessionStartEpoch
+            val sessionDurationMs = System.currentTimeMillis() - sessionStartAtRunStart
             if (sessionDurationMs >= 60_000L) {
                 showCongrats = true
             }
@@ -303,6 +318,140 @@ private fun SettingsToggleRow(
     }
 }
 
+/**
+ * A vertically-scrolling wheel picker with fling/momentum physics, similar
+ * to the Xiaomi clock app's alarm time picker. Snaps to the nearest item
+ * after a fling settles. Scroll gestures are captured only within this
+ * composable's bounds (via the background Surface) so page scrolling
+ * outside it is unaffected.
+ */
+@Composable
+fun WheelPicker(
+    value: Int,
+    range: IntRange,
+    onValueChange: (Int) -> Unit,
+    modifier: Modifier = Modifier,
+    itemHeight: androidx.compose.ui.unit.Dp = 44.dp,
+    visibleItemCount: Int = 3,
+    label: @Composable (Int) -> String = { it.toString().padStart(2, '0') }
+) {
+    val items = range.toList()
+    val startIndex = (value - range.first).coerceIn(0, items.size - 1)
+    val listState = rememberLazyListState(initialFirstVisibleItemIndex = startIndex)
+    val flingBehavior = rememberSnapFlingBehavior(lazyListState = listState)
+    val density = LocalDensity.current
+    val itemHeightPx = with(density) { itemHeight.toPx() }
+    val coroutineScope = rememberCoroutineScope()
+
+    // Report the centered item back to the caller once scrolling settles
+    LaunchedEffect(listState.isScrollInProgress) {
+        if (!listState.isScrollInProgress) {
+            val centerIndex = listState.firstVisibleItemIndex +
+                if (listState.firstVisibleItemScrollOffset > itemHeightPx / 2) 1 else 0
+            val clamped = centerIndex.coerceIn(0, items.size - 1)
+            val newValue = items[clamped]
+            if (newValue != value) onValueChange(newValue)
+        }
+    }
+
+    // If the external value changes (e.g. from +/- buttons), scroll to match
+    LaunchedEffect(value) {
+        val targetIndex = (value - range.first).coerceIn(0, items.size - 1)
+        if (targetIndex != listState.firstVisibleItemIndex || listState.firstVisibleItemScrollOffset != 0) {
+            coroutineScope.launch {
+                listState.animateScrollToItem(targetIndex)
+            }
+        }
+    }
+
+    val containerHeight = itemHeight * visibleItemCount
+
+    Surface(
+        modifier = modifier
+            .height(containerHeight)
+            .width(80.dp),
+        shape = RoundedCornerShape(16.dp),
+        color = MaterialTheme.colorScheme.surfaceContainerLow
+    ) {
+        Box(contentAlignment = Alignment.Center) {
+            // Selection highlight band in the middle
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(itemHeight)
+                    .background(
+                        MaterialTheme.colorScheme.primary.copy(alpha = 0.12f),
+                        RoundedCornerShape(12.dp)
+                    )
+            )
+
+            LazyColumn(
+                state = listState,
+                flingBehavior = flingBehavior,
+                contentPadding = PaddingValues(vertical = itemHeight * (visibleItemCount / 2)),
+                modifier = Modifier.fillMaxSize()
+            ) {
+                itemsIndexed(items) { index, item ->
+                    val isSelected by remember {
+                        derivedStateOf {
+                            val centerIndex = listState.firstVisibleItemIndex +
+                                if (listState.firstVisibleItemScrollOffset > itemHeightPx / 2) 1 else 0
+                            centerIndex == index
+                        }
+                    }
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(itemHeight),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            text = label(item),
+                            style = if (isSelected) MaterialTheme.typography.headlineSmall
+                                    else MaterialTheme.typography.titleMedium,
+                            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
+                            color = if (isSelected) MaterialTheme.colorScheme.primary
+                                    else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun FocusStartButton(
+    text: String,
+    enabled: Boolean = true,
+    onClick: () -> Unit
+) {
+    Button(
+        onClick = onClick,
+        enabled = enabled,
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(58.dp),
+        shape = RoundedCornerShape(20.dp),
+        colors = ButtonDefaults.buttonColors(
+            containerColor = MaterialTheme.colorScheme.primary,
+            contentColor = MaterialTheme.colorScheme.onPrimary
+        ),
+        elevation = ButtonDefaults.buttonElevation(defaultElevation = 0.dp)
+    ) {
+        Icon(
+            imageVector = Icons.Rounded.PlayArrow,
+            contentDescription = null,
+            modifier = Modifier.size(22.dp)
+        )
+        Spacer(modifier = Modifier.width(8.dp))
+        Text(
+            text = text,
+            style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold)
+        )
+    }
+}
+
 
 @OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
@@ -355,88 +504,57 @@ fun SimpleFocusSetup(onStart: (TimerConfig) -> Unit) {
         if (!isCountUp) {
             Column(
                 horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.spacedBy(16.dp)
+                verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
                 Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.Center,
+                    horizontalArrangement = Arrangement.spacedBy(20.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    FilledTonalIconButton(
-                        onClick = { if (hours < 23) hours++ },
-                        modifier = Modifier.size(64.dp),
-                        shapes = IconButtonDefaults.shapes(
-                            shape = IconButtonDefaults.extraLargeSquareShape,
-                            pressedShape = IconButtonDefaults.largePressedShape
+                    // Hours column: minus, wheel, plus
+                    Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        FilledTonalIconButton(
+                            onClick = { if (hours < 23) hours++ },
+                            modifier = Modifier.size(40.dp)
+                        ) { Icon(Icons.Rounded.Add, stringResource(R.string.increase_hours), modifier = Modifier.size(18.dp)) }
+                        WheelPicker(
+                            value = hours,
+                            range = 0..23,
+                            onValueChange = { hours = it }
                         )
-                    ) { Icon(Icons.Rounded.Add, stringResource(R.string.increase_hours)) }
-                    Spacer(Modifier.width(120.dp))
-                    FilledTonalIconButton(
-                        onClick = {
-                            if (minutes < 59) minutes++ else if (hours < 23) { hours++; minutes = 0 }
-                        },
-                        modifier = Modifier.size(64.dp),
-                        shapes = IconButtonDefaults.shapes(
-                            shape = IconButtonDefaults.extraLargeSquareShape,
-                            pressedShape = IconButtonDefaults.largePressedShape
-                        )
-                    ) { Icon(Icons.Rounded.Add, stringResource(R.string.increase_minutes)) }
-                }
+                        FilledTonalIconButton(
+                            onClick = { if (hours > 0) hours-- },
+                            modifier = Modifier.size(40.dp)
+                        ) { Icon(Icons.Rounded.Remove, stringResource(R.string.decrease_hours), modifier = Modifier.size(18.dp)) }
+                        Text(stringResource(R.string.hours), style = MaterialTheme.typography.labelMedium)
+                    }
 
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.Center
-                ) {
-                    Text(
-                        text = hours.toString().padStart(2, '0'),
-                        style = MaterialTheme.typography.displayLarge.copy(fontSize = 92.sp, fontWeight = FontWeight.Bold)
-                    )
                     Text(
                         text = ":",
-                        style = MaterialTheme.typography.displayLarge.copy(fontSize = 92.sp, fontWeight = FontWeight.Bold),
-                        modifier = Modifier.padding(horizontal = 16.dp)
+                        style = MaterialTheme.typography.displayMedium.copy(fontWeight = FontWeight.Bold),
+                        modifier = Modifier.padding(bottom = 24.dp)
                     )
-                    Text(
-                        text = minutes.toString().padStart(2, '0'),
-                        style = MaterialTheme.typography.displayLarge.copy(fontSize = 92.sp, fontWeight = FontWeight.Bold)
-                    )
-                }
 
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.Center,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    FilledTonalIconButton(
-                        onClick = { if (hours > 0) hours-- },
-                        modifier = Modifier.size(64.dp),
-                        shapes = IconButtonDefaults.shapes(
-                            shape = IconButtonDefaults.extraLargeSquareShape,
-                            pressedShape = IconButtonDefaults.largePressedShape
+                    // Minutes column: minus, wheel, plus
+                    Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        FilledTonalIconButton(
+                            onClick = {
+                                if (minutes < 59) minutes++ else if (hours < 23) { hours++; minutes = 0 }
+                            },
+                            modifier = Modifier.size(40.dp)
+                        ) { Icon(Icons.Rounded.Add, stringResource(R.string.increase_minutes), modifier = Modifier.size(18.dp)) }
+                        WheelPicker(
+                            value = minutes,
+                            range = 0..59,
+                            onValueChange = { minutes = it }
                         )
-                    ) { Icon(Icons.Rounded.Remove, stringResource(R.string.decrease_hours)) }
-                    Spacer(Modifier.width(120.dp))
-                    FilledTonalIconButton(
-                        onClick = {
-                            if (minutes > 0) minutes-- else if (hours > 0) { hours--; minutes = 59 }
-                        },
-                        modifier = Modifier.size(64.dp),
-                        shapes = IconButtonDefaults.shapes(
-                            shape = IconButtonDefaults.extraLargeSquareShape,
-                            pressedShape = IconButtonDefaults.largePressedShape
-                        )
-                    ) { Icon(Icons.Rounded.Remove, stringResource(R.string.decrease_minutes)) }
-                }
-
-                Spacer(Modifier.height(8.dp))
-
-                Row(
-                    modifier = Modifier.fillMaxWidth(0.8f),
-                    horizontalArrangement = Arrangement.SpaceAround
-                ) {
-                    Text(stringResource(R.string.hours), style = MaterialTheme.typography.titleMedium)
-                    Text(stringResource(R.string.minutes), style = MaterialTheme.typography.titleMedium)
+                        FilledTonalIconButton(
+                            onClick = {
+                                if (minutes > 0) minutes-- else if (hours > 0) { hours--; minutes = 59 }
+                            },
+                            modifier = Modifier.size(40.dp)
+                        ) { Icon(Icons.Rounded.Remove, stringResource(R.string.decrease_minutes), modifier = Modifier.size(18.dp)) }
+                        Text(stringResource(R.string.minutes), style = MaterialTheme.typography.labelMedium)
+                    }
                 }
             }
         } else {
@@ -456,22 +574,32 @@ fun SimpleFocusSetup(onStart: (TimerConfig) -> Unit) {
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     textAlign = androidx.compose.ui.text.style.TextAlign.Center
                 )
-                Spacer(Modifier.height(32.dp))
+                Spacer(Modifier.height(24.dp))
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.Center
+                    horizontalArrangement = Arrangement.spacedBy(20.dp)
                 ) {
-                    FilledTonalIconButton(onClick = {
-                        if (ratio > 1) { ratio--; prefs.edit().putInt("timer_count_up_ratio", ratio).apply() }
-                    }) { Icon(Icons.Rounded.Remove, stringResource(R.string.decrease)) }
-                    Text(
-                        text = stringResource(R.string.ratio_format, ratio),
-                        style = MaterialTheme.typography.displayLarge.copy(fontSize = 72.sp, fontWeight = FontWeight.Bold),
-                        modifier = Modifier.padding(horizontal = 32.dp)
+                    FilledTonalIconButton(
+                        onClick = {
+                            if (ratio > 1) { ratio--; prefs.edit().putInt("timer_count_up_ratio", ratio).apply() }
+                        },
+                        modifier = Modifier.size(40.dp)
+                    ) { Icon(Icons.Rounded.Remove, stringResource(R.string.decrease), modifier = Modifier.size(18.dp)) }
+                    WheelPicker(
+                        value = ratio,
+                        range = 1..10,
+                        onValueChange = {
+                            ratio = it
+                            prefs.edit().putInt("timer_count_up_ratio", ratio).apply()
+                        },
+                        label = { stringResource(R.string.ratio_format, it) }
                     )
-                    FilledTonalIconButton(onClick = {
-                        if (ratio < 10) { ratio++; prefs.edit().putInt("timer_count_up_ratio", ratio).apply() }
-                    }) { Icon(Icons.Rounded.Add, stringResource(R.string.increase)) }
+                    FilledTonalIconButton(
+                        onClick = {
+                            if (ratio < 10) { ratio++; prefs.edit().putInt("timer_count_up_ratio", ratio).apply() }
+                        },
+                        modifier = Modifier.size(40.dp)
+                    ) { Icon(Icons.Rounded.Add, stringResource(R.string.increase), modifier = Modifier.size(18.dp)) }
                 }
             }
         }
@@ -549,26 +677,14 @@ fun SimpleFocusSetup(onStart: (TimerConfig) -> Unit) {
 
         Spacer(modifier = Modifier.height(32.dp))
 
-        Button(
+        FocusStartButton(
+            text = if (isCountUp) stringResource(R.string.start_count_up) else stringResource(R.string.start),
+            enabled = isCountUp || totalMinutes > 0,
             onClick = {
                 if (isCountUp) onStart(TimerConfig.CountUp(ratio, isStrictMode))
                 else onStart(TimerConfig.Simple(totalMinutes, isStrictMode))
-            },
-            modifier = Modifier.fillMaxWidth(),
-            enabled = isCountUp || totalMinutes > 0,
-            shapes = ButtonDefaults.shapes(pressedShape = ButtonDefaults.pressedShape),
-            colors = ButtonDefaults.buttonColors(
-                containerColor = MaterialTheme.colorScheme.primary,
-                contentColor = MaterialTheme.colorScheme.onPrimary
-            )
-        ) {
-            Icon(imageVector = Icons.Rounded.PlayArrow, contentDescription = null, modifier = Modifier.size(32.dp))
-            Spacer(modifier = Modifier.width(8.dp))
-            Text(
-                text = if (isCountUp) stringResource(R.string.start_count_up) else stringResource(R.string.start),
-                style = MaterialTheme.typography.titleLarge
-            )
-        }
+            }
+        )
 
         Spacer(modifier = Modifier.height(16.dp))
     }
@@ -714,7 +830,8 @@ fun PomodoroFocusSetup(onStart: (TimerConfig) -> Unit) {
 
         Spacer(modifier = Modifier.height(16.dp))
 
-        Button(
+        FocusStartButton(
+            text = stringResource(R.string.start_pomodoro),
             onClick = {
                 onStart(
                     TimerConfig.Pomodoro(
@@ -725,24 +842,8 @@ fun PomodoroFocusSetup(onStart: (TimerConfig) -> Unit) {
                         isStrictMode
                     )
                 )
-            },
-            modifier = Modifier.fillMaxWidth(),
-            colors = ButtonDefaults.buttonColors(
-                containerColor = MaterialTheme.colorScheme.primary,
-                contentColor = MaterialTheme.colorScheme.onPrimary
-            )
-        ) {
-            Icon(
-                imageVector = Icons.TwoTone.PlayArrow,
-                contentDescription = null,
-                modifier = Modifier.size(32.dp)
-            )
-            Spacer(modifier = Modifier.width(8.dp))
-            Text(
-                text = stringResource(R.string.start_pomodoro),
-                style = MaterialTheme.typography.titleLarge
-            )
-        }
+            }
+        )
     }
 }
 @OptIn(ExperimentalMaterial3ExpressiveApi::class)
@@ -942,6 +1043,18 @@ fun RunningTimerView(
                             style = MaterialTheme.typography.labelLarge,
                             fontWeight = FontWeight.Bold
                         )
+                    }
+                }
+                if (!isStrictMode && state.breakBudget > 0) {
+                    Spacer(modifier = Modifier.height(12.dp))
+                    FilledTonalButton(
+                        onClick = onTakeBreak,
+                        modifier = Modifier.height(48.dp),
+                        shape = RoundedCornerShape(14.dp)
+                    ) {
+                        Icon(Icons.Rounded.Coffee, null, Modifier.size(18.dp))
+                        Spacer(Modifier.width(8.dp))
+                        Text(text = stringResource(R.string.redeem_break), style = MaterialTheme.typography.labelLarge)
                     }
                 }
             }
@@ -1149,14 +1262,6 @@ fun RunningTimerActions(
             }
 
             if (!isStrictMode) {
-                if (canRedeemBreak) {
-                    FilledTonalButton(
-                        onClick = onTakeBreak,
-                        modifier = Modifier.weight(1f).height(64.dp)
-                    ) {
-                        Text(text = stringResource(R.string.redeem_break), style = MaterialTheme.typography.titleMedium)
-                    }
-                }
                 // Cancel / Stop Focusing button with optional grace countdown overlay
                 Box(
                     modifier = Modifier.weight(1f).padding(12.dp).height(84.dp),
@@ -1219,15 +1324,22 @@ fun RunningTimerActions(
 
         // Skip break button — shown during break phases
         if (isBreak) {
-            OutlinedButton(
+            FilledTonalButton(
                 onClick = onSkip,
-                modifier = Modifier.fillMaxWidth(),
-                shapes = ButtonDefaults.shapes()
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 12.dp)
+                    .height(52.dp),
+                shape = RoundedCornerShape(16.dp),
+                colors = ButtonDefaults.filledTonalButtonColors(
+                    containerColor = MaterialTheme.colorScheme.secondaryContainer,
+                    contentColor = MaterialTheme.colorScheme.onSecondaryContainer
+                )
             ) {
                 Icon(Icons.Rounded.SkipNext, contentDescription = null,
-                    modifier = Modifier.size(18.dp))
-                Spacer(Modifier.width(6.dp))
-                Text(stringResource(R.string.skip_break))
+                    modifier = Modifier.size(20.dp))
+                Spacer(Modifier.width(8.dp))
+                Text(stringResource(R.string.skip_break), style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.SemiBold))
             }
         }
     }
