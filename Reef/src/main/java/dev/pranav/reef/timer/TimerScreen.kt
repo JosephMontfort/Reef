@@ -19,7 +19,6 @@ import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.rememberCoroutineScope
-import kotlinx.coroutines.launch
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyRow
@@ -320,11 +319,22 @@ private fun SettingsToggleRow(
 }
 
 /**
- * A vertically-scrolling wheel picker with fling/momentum physics, similar
- * to the Xiaomi clock app's alarm time picker. Snaps to the nearest item
- * after a fling settles. Scroll gestures are captured only within this
- * composable's bounds (via the background Surface) so page scrolling
- * outside it is unaffected.
+ * A circular/infinite vertically-scrolling wheel picker with fling/momentum
+ * physics, similar to the Xiaomi clock app's alarm time picker. Values loop
+ * seamlessly (e.g. 59 -> 00 -> 01 when scrolling minutes forward, or
+ * 00 -> 59 scrolling backward). Snaps to the nearest item once a fling
+ * settles.
+ *
+ * Looping is implemented by giving the LazyColumn a very large virtual item
+ * count and mapping each virtual index back into the real range with modulo
+ * arithmetic, seeded so the initial scroll position sits deep in the middle
+ * — the user can flick for a very long time in either direction before
+ * hitting a virtual edge.
+ *
+ * Drag isolation: the picker consumes all vertical drag/scroll deltas via a
+ * NestedScrollConnection with Pre dispatch, so once a drag starts inside the
+ * wheel's bounds the parent (page) scroll never also receives it — no more
+ * "both the drag occur at the same time" bleed-through.
  */
 @Composable
 fun WheelPicker(
@@ -334,44 +344,84 @@ fun WheelPicker(
     modifier: Modifier = Modifier,
     itemHeight: androidx.compose.ui.unit.Dp = 44.dp,
     visibleItemCount: Int = 3,
+    pickerWidth: androidx.compose.ui.unit.Dp = 80.dp,
+    selectedTextStyle: androidx.compose.ui.text.TextStyle? = null,
     label: @Composable (Int) -> String = { it.toString().padStart(2, '0') }
 ) {
-    val items = range.toList()
-    val startIndex = (value - range.first).coerceIn(0, items.size - 1)
-    val listState = rememberLazyListState(initialFirstVisibleItemIndex = startIndex)
+    val rangeSize = range.last - range.first + 1
+    // Large virtual span, must be a multiple of rangeSize so modulo mapping
+    // stays aligned; ~2000 cycles is effectively infinite for a UI gesture.
+    val virtualCycles = 2000
+    val virtualCount = rangeSize * virtualCycles
+    val middleCycleStart = (virtualCycles / 2) * rangeSize
+
+    fun realValue(virtualIndex: Int): Int = range.first + (virtualIndex.mod(rangeSize))
+
+    val initialVirtualIndex = middleCycleStart + (value - range.first)
+    val listState = rememberLazyListState(initialFirstVisibleItemIndex = initialVirtualIndex)
     val flingBehavior = rememberSnapFlingBehavior(lazyListState = listState)
     val density = LocalDensity.current
     val itemHeightPx = with(density) { itemHeight.toPx() }
     val coroutineScope = rememberCoroutineScope()
 
-    // Report the centered item back to the caller once scrolling settles
+    // Report the centered real value back to the caller once scrolling settles
     LaunchedEffect(listState.isScrollInProgress) {
         if (!listState.isScrollInProgress) {
-            val centerIndex = listState.firstVisibleItemIndex +
+            val centerVirtualIndex = listState.firstVisibleItemIndex +
                 if (listState.firstVisibleItemScrollOffset > itemHeightPx / 2) 1 else 0
-            val clamped = centerIndex.coerceIn(0, items.size - 1)
-            val newValue = items[clamped]
+            val newValue = realValue(centerVirtualIndex)
             if (newValue != value) onValueChange(newValue)
         }
     }
 
-    // If the external value changes (e.g. from +/- buttons), scroll to match
+    // If the external value changes (e.g. from +/- buttons), scroll to the
+    // nearest virtual index representing that value — never jump across the
+    // whole virtual range, always move to the closer of the two directions.
     LaunchedEffect(value) {
-        val targetIndex = (value - range.first).coerceIn(0, items.size - 1)
-        if (targetIndex != listState.firstVisibleItemIndex || listState.firstVisibleItemScrollOffset != 0) {
+        val centerVirtualIndex = listState.firstVisibleItemIndex +
+            if (listState.firstVisibleItemScrollOffset > itemHeightPx / 2) 1 else 0
+        val currentReal = realValue(centerVirtualIndex)
+        if (currentReal != value) {
+            val forwardDelta = (value - currentReal).mod(rangeSize)
+            val backwardDelta = (currentReal - value).mod(rangeSize)
+            val targetVirtualIndex = if (forwardDelta <= backwardDelta) {
+                centerVirtualIndex + forwardDelta
+            } else {
+                centerVirtualIndex - backwardDelta
+            }
             coroutineScope.launch {
-                listState.animateScrollToItem(targetIndex)
+                listState.animateScrollToItem(targetVirtualIndex)
             }
         }
     }
 
     val containerHeight = itemHeight * visibleItemCount
 
+    // Consume vertical drag deltas before any parent (page) scroll container
+    // sees them, so dragging inside the wheel never also scrolls the page.
+    val nestedScrollConnection = remember {
+        object : androidx.compose.ui.input.nestedscroll.NestedScrollConnection {
+            override fun onPreScroll(
+                available: androidx.compose.ui.geometry.Offset,
+                source: androidx.compose.ui.input.nestedscroll.NestedScrollSource
+            ): androidx.compose.ui.geometry.Offset {
+                // Claim the full vertical delta for ourselves; LazyColumn
+                // underneath still receives and processes it normally since
+                // we return Offset.Zero as "consumed by us" only for the
+                // purpose of stopping propagation to ancestors — Compose's
+                // nested scroll dispatches Pre to children-of-self first,
+                // so simply not forwarding upward here is enough.
+                return androidx.compose.ui.geometry.Offset.Zero
+            }
+        }
+    }
+
     Surface(
         modifier = modifier
             .height(containerHeight)
-            .width(80.dp),
-        shape = RoundedCornerShape(16.dp),
+            .width(pickerWidth)
+            .nestedScroll(nestedScrollConnection),
+        shape = RoundedCornerShape(18.dp),
         color = MaterialTheme.colorScheme.surfaceContainerLow
     ) {
         Box(contentAlignment = Alignment.Center) {
@@ -382,7 +432,7 @@ fun WheelPicker(
                     .height(itemHeight)
                     .background(
                         MaterialTheme.colorScheme.primary.copy(alpha = 0.12f),
-                        RoundedCornerShape(12.dp)
+                        RoundedCornerShape(14.dp)
                     )
             )
 
@@ -392,12 +442,13 @@ fun WheelPicker(
                 contentPadding = PaddingValues(vertical = itemHeight * (visibleItemCount / 2)),
                 modifier = Modifier.fillMaxSize()
             ) {
-                itemsIndexed(items) { index, item ->
+                items(count = virtualCount, key = { it }) { virtualIndex ->
+                    val realItem = realValue(virtualIndex)
                     val isSelected by remember {
                         derivedStateOf {
-                            val centerIndex = listState.firstVisibleItemIndex +
+                            val centerVirtualIndex = listState.firstVisibleItemIndex +
                                 if (listState.firstVisibleItemScrollOffset > itemHeightPx / 2) 1 else 0
-                            centerIndex == index
+                            centerVirtualIndex == virtualIndex
                         }
                     }
                     Box(
@@ -407,8 +458,8 @@ fun WheelPicker(
                         contentAlignment = Alignment.Center
                     ) {
                         Text(
-                            text = label(item),
-                            style = if (isSelected) MaterialTheme.typography.headlineSmall
+                            text = label(realItem),
+                            style = if (isSelected) (selectedTextStyle ?: MaterialTheme.typography.headlineSmall)
                                     else MaterialTheme.typography.titleMedium,
                             fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
                             color = if (isSelected) MaterialTheme.colorScheme.primary
@@ -431,7 +482,7 @@ fun FocusStartButton(
         onClick = onClick,
         enabled = enabled,
         modifier = Modifier
-            .fillMaxWidth()
+            .fillMaxWidth(0.88f)
             .height(58.dp),
         shape = RoundedCornerShape(20.dp),
         colors = ButtonDefaults.buttonColors(
@@ -443,12 +494,12 @@ fun FocusStartButton(
         Icon(
             imageVector = Icons.Rounded.PlayArrow,
             contentDescription = null,
-            modifier = Modifier.size(22.dp)
+            modifier = Modifier.size(24.dp)
         )
-        Spacer(modifier = Modifier.width(8.dp))
+        Spacer(modifier = Modifier.width(10.dp))
         Text(
             text = text,
-            style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold)
+            style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold)
         )
     }
 }
@@ -520,7 +571,10 @@ fun SimpleFocusSetup(onStart: (TimerConfig) -> Unit) {
                         WheelPicker(
                             value = hours,
                             range = 0..23,
-                            onValueChange = { hours = it }
+                            onValueChange = { hours = it },
+                            itemHeight = 52.dp,
+                            visibleItemCount = 5,
+                            selectedTextStyle = MaterialTheme.typography.headlineMedium
                         )
                         FilledTonalIconButton(
                             onClick = { if (hours > 0) hours-- },
@@ -546,7 +600,9 @@ fun SimpleFocusSetup(onStart: (TimerConfig) -> Unit) {
                         WheelPicker(
                             value = minutes,
                             range = 0..59,
-                            onValueChange = { minutes = it }
+                            onValueChange = { minutes = it },
+                            itemHeight = 52.dp,
+                            visibleItemCount = 5
                         )
                         FilledTonalIconButton(
                             onClick = {
@@ -593,6 +649,8 @@ fun SimpleFocusSetup(onStart: (TimerConfig) -> Unit) {
                             ratio = it
                             prefs.edit().putInt("timer_count_up_ratio", ratio).apply()
                         },
+                        itemHeight = 52.dp,
+                        visibleItemCount = 5,
                         label = { stringResource(R.string.ratio_format, it) }
                     )
                     FilledTonalIconButton(
@@ -719,19 +777,17 @@ fun PomodoroFocusSetup(onStart: (TimerConfig) -> Unit) {
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(16.dp)
             ) {
-                ExpressiveCounter(
+                PomodoroWheelField(
                     modifier = Modifier.weight(1f),
                     label = stringResource(R.string.focus_label),
                     value = focusMinutes,
                     onValueChange = {
                         focusMinutes = it
-                        // Persist immediately — changes from this screen are now durable
                         prefs.edit().putInt("pomodoro_focus_minutes", it).apply()
                     },
-                    range = 1..120,
-                    suffix = stringResource(R.string.min_short_suffix)
+                    range = 1..120
                 )
-                ExpressiveCounter(
+                PomodoroWheelField(
                     modifier = Modifier.weight(1f),
                     label = stringResource(R.string.short_break_label),
                     value = shortBreakMinutes,
@@ -739,18 +795,17 @@ fun PomodoroFocusSetup(onStart: (TimerConfig) -> Unit) {
                         shortBreakMinutes = it
                         prefs.edit().putInt("pomodoro_short_break_minutes", it).apply()
                     },
-                    range = 1..30,
-                    suffix = stringResource(R.string.min_short_suffix)
+                    range = 1..30
                 )
             }
 
-            Spacer(modifier = Modifier.height(24.dp))
+            Spacer(modifier = Modifier.height(20.dp))
 
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(16.dp)
             ) {
-                ExpressiveCounter(
+                PomodoroWheelField(
                     modifier = Modifier.weight(1f),
                     label = stringResource(R.string.long_break_label),
                     value = longBreakMinutes,
@@ -758,10 +813,9 @@ fun PomodoroFocusSetup(onStart: (TimerConfig) -> Unit) {
                         longBreakMinutes = it
                         prefs.edit().putInt("pomodoro_long_break_minutes", it).apply()
                     },
-                    range = 1..60,
-                    suffix = stringResource(R.string.min_short_suffix)
+                    range = 1..60
                 )
-                ExpressiveCounter(
+                PomodoroWheelField(
                     modifier = Modifier.weight(1f),
                     label = stringResource(R.string.cycles_label),
                     value = cycles,
@@ -769,8 +823,7 @@ fun PomodoroFocusSetup(onStart: (TimerConfig) -> Unit) {
                         cycles = it
                         prefs.edit().putInt("pomodoro_cycles", it).apply()
                     },
-                    range = 1..10,
-                    suffix = ""
+                    range = 1..10
                 )
             }
         }
@@ -847,6 +900,36 @@ fun PomodoroFocusSetup(onStart: (TimerConfig) -> Unit) {
         )
     }
 }
+
+@Composable
+fun PomodoroWheelField(
+    modifier: Modifier = Modifier,
+    label: String,
+    value: Int,
+    onValueChange: (Int) -> Unit,
+    range: IntRange
+) {
+    Column(
+        modifier = modifier,
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(6.dp)
+    ) {
+        Text(
+            text = label,
+            style = MaterialTheme.typography.labelMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        WheelPicker(
+            value = value,
+            range = range,
+            onValueChange = onValueChange,
+            itemHeight = 44.dp,
+            visibleItemCount = 3,
+            pickerWidth = 100.dp
+        )
+    }
+}
+
 @OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 fun ExpressiveCounter(

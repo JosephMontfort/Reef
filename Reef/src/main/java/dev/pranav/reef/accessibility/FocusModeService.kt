@@ -353,6 +353,15 @@ class FocusModeService : Service() {
 
     private fun skipBreak() {
         val state = TimerStateManager.state.value
+
+        // CountUp mode: skip the COUNT_UP_BREAK phase and resume focusing
+        if (state.isCountUpMode && state.pomodoroPhase == PomodoroPhase.COUNT_UP_BREAK) {
+            tickHandler.removeCallbacksAndMessages(null)
+            cancelCompletionAlarm()
+            resumeCountUpAfterBreak()
+            return
+        }
+
         if (!state.isPomodoroMode) return
         if (state.pomodoroPhase != PomodoroPhase.SHORT_BREAK &&
             state.pomodoroPhase != PomodoroPhase.LONG_BREAK) return
