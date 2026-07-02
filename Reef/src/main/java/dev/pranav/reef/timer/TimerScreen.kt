@@ -65,6 +65,7 @@ import dev.pranav.reef.util.formatTime
 import dev.pranav.reef.util.WatchdogManager
 import dev.pranav.reef.util.WhitelistAppCache
 import dev.pranav.reef.util.prefs
+import kotlinx.coroutines.launch
 
 sealed interface TimerConfig {
     data class Simple(val minutes: Int, val strictMode: Boolean): TimerConfig
