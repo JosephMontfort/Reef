@@ -112,7 +112,7 @@ fun MainSettingsContent(
                     modifier = Modifier
                         .clickable {
                             uiHapticsEnabled = !uiHapticsEnabled
-                            dev.pranav.reef.util.HapticSettings.setEnabled(uiHapticsEnabled)
+                            dev.pranav.reef.util.HapticSettings.updateEnabled(uiHapticsEnabled)
                             confirmHaptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.LongPress)
                         }
                         .padding(4.dp),
@@ -129,7 +129,7 @@ fun MainSettingsContent(
                             checked = uiHapticsEnabled,
                             onCheckedChange = {
                                 uiHapticsEnabled = it
-                                dev.pranav.reef.util.HapticSettings.setEnabled(it)
+                                dev.pranav.reef.util.HapticSettings.updateEnabled(it)
                                 confirmHaptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.LongPress)
                             }
                         )

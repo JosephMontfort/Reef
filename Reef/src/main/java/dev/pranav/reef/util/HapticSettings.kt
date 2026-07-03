@@ -26,7 +26,7 @@ object HapticSettings {
         isEnabled = prefs.getBoolean(KEY, true)
     }
 
-    fun setEnabled(enabled: Boolean) {
+    fun updateEnabled(enabled: Boolean) {
         isEnabled = enabled
         prefs.edit { putBoolean(KEY, enabled) }
     }
