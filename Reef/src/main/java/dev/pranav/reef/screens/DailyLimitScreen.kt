@@ -110,6 +110,7 @@ private fun DailyLimitContent(
 ) {
     var hours by remember { mutableIntStateOf(existingLimitMinutes / 60) }
     var minutes by remember { mutableIntStateOf(existingLimitMinutes % 60) }
+    val haptic = dev.pranav.reef.util.rememberGatedHapticFeedback()
 
     val totalMinutes = hours * 60 + minutes
     val averageUsage = dailyData.map { it.usageMinutes }.average().takeIf { !it.isNaN() } ?: 0.0
@@ -268,7 +269,7 @@ private fun DailyLimitContent(
                 ) {
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
                         FilledTonalIconButton(
-                            onClick = { if (hours < 12) hours++ },
+                            onClick = { haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.TextHandleMove); if (hours < 12) hours++ },
                             modifier = Modifier.size(44.dp),
                             shapes = IconButtonDefaults.shapes(
                                 shape = IconButtonDefaults.extraLargeSquareShape,
@@ -285,7 +286,7 @@ private fun DailyLimitContent(
                         )
 
                         FilledTonalIconButton(
-                            onClick = { if (hours > 0) hours-- },
+                            onClick = { haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.TextHandleMove); if (hours > 0) hours-- },
                             modifier = Modifier.size(44.dp),
                             shapes = IconButtonDefaults.shapes(
                                 shape = IconButtonDefaults.extraLargeSquareShape,
@@ -313,6 +314,7 @@ private fun DailyLimitContent(
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
                         FilledTonalIconButton(
                             onClick = {
+                                haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.TextHandleMove)
                                 if (minutes < 59) minutes++ else if (hours < 12) {
                                     hours++; minutes = 0
                                 }
@@ -334,6 +336,7 @@ private fun DailyLimitContent(
 
                         FilledTonalIconButton(
                             onClick = {
+                                haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.TextHandleMove)
                                 if (minutes > 0) minutes-- else if (hours > 0) {
                                     hours--; minutes = 59
                                 }

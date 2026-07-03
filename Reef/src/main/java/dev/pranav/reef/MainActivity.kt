@@ -609,6 +609,7 @@ private fun ReefBottomNavBar(
     selectedItem: Int,
     onItemSelected: (Int) -> Unit
 ) {
+    val haptic = dev.pranav.reef.util.rememberGatedHapticFeedback()
     val items = listOf(
         Triple(Icons.Rounded.Home,        stringResource(R.string.nav_home),     0),
         Triple(Icons.Rounded.BarChart,    stringResource(R.string.nav_stats),    1),
@@ -635,7 +636,12 @@ private fun ReefBottomNavBar(
                     icon = icon,
                     label = label,
                     selected = selectedItem == index,
-                    onClick = { onItemSelected(index) }
+                    onClick = {
+                        if (selectedItem != index) {
+                            haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.TextHandleMove)
+                        }
+                        onItemSelected(index)
+                    }
                 )
             }
         }

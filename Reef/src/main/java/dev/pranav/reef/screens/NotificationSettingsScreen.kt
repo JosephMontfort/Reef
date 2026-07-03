@@ -31,6 +31,7 @@ fun NotificationSettingsContent(
     BackHandler { onBackPressed() }
 
     val context = LocalContext.current
+    val haptic = dev.pranav.reef.util.rememberGatedHapticFeedback()
     var focusReminders by remember { mutableStateOf(prefs.getBoolean("focus_reminders", true)) }
     var breakAlerts by remember { mutableStateOf(prefs.getBoolean("break_alerts", true)) }
     var dailySummary by remember { mutableStateOf(prefs.getBoolean("daily_summary", false)) }
@@ -75,6 +76,7 @@ fun NotificationSettingsContent(
                     ListItem(
                         modifier = Modifier
                             .clickable {
+                                haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.TextHandleMove)
                                 focusReminders = !focusReminders
                                 prefs.edit { putBoolean("focus_reminders", focusReminders) }
                             }
@@ -93,6 +95,7 @@ fun NotificationSettingsContent(
                         },
                         trailingContent = {
                             Switch(checked = focusReminders, onCheckedChange = {
+                                haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.TextHandleMove)
                                 focusReminders = it
                                 prefs.edit { putBoolean("focus_reminders", it) }
                             })
@@ -107,6 +110,7 @@ fun NotificationSettingsContent(
                     ListItem(
                         modifier = Modifier
                             .clickable {
+                                haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.TextHandleMove)
                                 breakAlerts = !breakAlerts
                                 prefs.edit { putBoolean("break_alerts", breakAlerts) }
                             }
@@ -125,6 +129,7 @@ fun NotificationSettingsContent(
                         },
                         trailingContent = {
                             Switch(checked = breakAlerts, onCheckedChange = {
+                                haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.TextHandleMove)
                                 breakAlerts = it
                                 prefs.edit { putBoolean("break_alerts", it) }
                             })
@@ -139,6 +144,7 @@ fun NotificationSettingsContent(
                     ListItem(
                         modifier = Modifier
                             .clickable {
+                                haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.TextHandleMove)
                                 dailySummary = !dailySummary
                                 prefs.edit { putBoolean("daily_summary", dailySummary) }
                                 if (dailySummary) {
@@ -162,6 +168,7 @@ fun NotificationSettingsContent(
                         },
                         trailingContent = {
                             Switch(checked = dailySummary, onCheckedChange = {
+                                haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.TextHandleMove)
                                 dailySummary = it
                                 prefs.edit { putBoolean("daily_summary", it) }
                                 if (it) {
@@ -181,6 +188,7 @@ fun NotificationSettingsContent(
                     ListItem(
                         modifier = Modifier
                             .clickable {
+                                haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.TextHandleMove)
                                 limitWarnings = !limitWarnings
                                 prefs.edit { putBoolean("limit_warnings", limitWarnings) }
                             }
@@ -199,6 +207,7 @@ fun NotificationSettingsContent(
                         },
                         trailingContent = {
                             Switch(checked = limitWarnings, onCheckedChange = {
+                                haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.TextHandleMove)
                                 limitWarnings = it
                                 prefs.edit { putBoolean("limit_warnings", it) }
                             })

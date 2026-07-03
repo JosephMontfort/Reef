@@ -251,6 +251,7 @@ fun FocusModeGroup(
     onSelectionChange: (Int) -> Unit
 ) {
     val modes = listOf(stringResource(R.string.timer_tab), stringResource(R.string.pomodoro_tab))
+    val haptic = dev.pranav.reef.util.rememberGatedHapticFeedback()
 
     FlowRow(
         Modifier
@@ -264,6 +265,7 @@ fun FocusModeGroup(
                 checked = index == selectedMode,
                 onCheckedChange = {
                     if (selectedMode != index) {
+                        haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.TextHandleMove)
                         onSelectionChange(index)
                     }
                 },
@@ -384,14 +386,18 @@ fun WheelPicker(
         if (listState.firstVisibleItemScrollOffset > itemHeightPx / 2) 1 else 0
 
     // Per-tick haptic: fire once for every distinct centered item passed
-    // while actively scrolling — the "click click click" Xiaomi-clock feel.
+    // while the USER is actively dragging/flinging — guarded by
+    // isScrollInProgress so the +/- buttons' own animateScrollToItem() call
+    // doesn't also fire a second tick (that was the "double tick" bug).
     var lastHapticVirtualIndex by remember { mutableIntStateOf(initialVirtualIndex) }
     LaunchedEffect(listState) {
-        snapshotFlow { centerVirtualIndex() }
-            .collect { centerIndex ->
-                if (centerIndex != lastHapticVirtualIndex) {
+        snapshotFlow { centerVirtualIndex() to listState.isScrollInProgress }
+            .collect { (centerIndex, inProgress) ->
+                if (inProgress && centerIndex != lastHapticVirtualIndex) {
                     lastHapticVirtualIndex = centerIndex
                     haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                } else if (!inProgress) {
+                    lastHapticVirtualIndex = centerIndex
                 }
             }
     }

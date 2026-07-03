@@ -53,6 +53,7 @@ fun CreateRoutineScreen(
     val scope = rememberCoroutineScope()
     val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
     val snackbarHostState = remember { SnackbarHostState() }
+    val haptic = dev.pranav.reef.util.rememberGatedHapticFeedback()
 
     var currentRoutine by remember { mutableStateOf<Routine?>(null) }
     var routineName by remember { mutableStateOf("") }
@@ -139,7 +140,10 @@ fun CreateRoutineScreen(
             ) {
                 ToggleButton(
                     checked = scheduleType == RoutineSchedule.ScheduleType.MANUAL,
-                    onCheckedChange = { scheduleType = RoutineSchedule.ScheduleType.MANUAL },
+                    onCheckedChange = {
+                        haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.TextHandleMove)
+                        scheduleType = RoutineSchedule.ScheduleType.MANUAL
+                    },
                     shapes = ButtonGroupDefaults.connectedLeadingButtonShapes(),
                     modifier = Modifier.weight(1f)
                 ) {
@@ -148,7 +152,10 @@ fun CreateRoutineScreen(
 
                 ToggleButton(
                     checked = scheduleType == RoutineSchedule.ScheduleType.DAILY,
-                    onCheckedChange = { scheduleType = RoutineSchedule.ScheduleType.DAILY },
+                    onCheckedChange = {
+                        haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.TextHandleMove)
+                        scheduleType = RoutineSchedule.ScheduleType.DAILY
+                    },
                     shapes = ButtonGroupDefaults.connectedMiddleButtonShapes(),
                     modifier = Modifier.weight(1f)
                 ) {
@@ -157,7 +164,10 @@ fun CreateRoutineScreen(
 
                 ToggleButton(
                     checked = scheduleType == RoutineSchedule.ScheduleType.WEEKLY,
-                    onCheckedChange = { scheduleType = RoutineSchedule.ScheduleType.WEEKLY },
+                    onCheckedChange = {
+                        haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.TextHandleMove)
+                        scheduleType = RoutineSchedule.ScheduleType.WEEKLY
+                    },
                     shapes = ButtonGroupDefaults.connectedTrailingButtonShapes(),
                     modifier = Modifier.weight(1f)
                 ) {
@@ -247,6 +257,7 @@ fun CreateRoutineScreen(
                             FilterChip(
                                 selected = selectedDays.contains(day),
                                 onClick = {
+                                    haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.TextHandleMove)
                                     selectedDays = if (selectedDays.contains(day))
                                         selectedDays - day
                                     else selectedDays + day
@@ -857,6 +868,7 @@ private fun GroupConfigStep(
     onSharedLimitChange: (Int) -> Unit,
     onNext: () -> Unit
 ) {
+    val haptic = dev.pranav.reef.util.rememberGatedHapticFeedback()
     Text(
         text = stringResource(R.string.create_group),
         style = MaterialTheme.typography.headlineSmall,
@@ -885,7 +897,10 @@ private fun GroupConfigStep(
     ) {
         ToggleButton(
             checked = groupType == Routine.AppGroup.GroupType.SHARED,
-            onCheckedChange = { onGroupTypeChange(Routine.AppGroup.GroupType.SHARED) },
+            onCheckedChange = {
+                haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.TextHandleMove)
+                onGroupTypeChange(Routine.AppGroup.GroupType.SHARED)
+            },
             shapes = ButtonGroupDefaults.connectedLeadingButtonShapes(),
             modifier = Modifier.weight(1f)
         ) {
@@ -893,7 +908,10 @@ private fun GroupConfigStep(
         }
         ToggleButton(
             checked = groupType == Routine.AppGroup.GroupType.INDIVIDUAL,
-            onCheckedChange = { onGroupTypeChange(Routine.AppGroup.GroupType.INDIVIDUAL) },
+            onCheckedChange = {
+                haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.TextHandleMove)
+                onGroupTypeChange(Routine.AppGroup.GroupType.INDIVIDUAL)
+            },
             shapes = ButtonGroupDefaults.connectedTrailingButtonShapes(),
             modifier = Modifier.weight(1f)
         ) {
@@ -939,6 +957,7 @@ private fun GroupConfigStep(
             ) {
                 FilledTonalButton(
                     onClick = {
+                        haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.TextHandleMove)
                         if (sharedLimitMinutes >= 15) onSharedLimitChange(sharedLimitMinutes - 15) else if (sharedLimitMinutes > 0) onSharedLimitChange(
                             0
                         )
@@ -949,6 +968,7 @@ private fun GroupConfigStep(
 
                 FilledTonalButton(
                     onClick = {
+                        haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.TextHandleMove)
                         if (sharedLimitMinutes >= 5) onSharedLimitChange(sharedLimitMinutes - 5) else if (sharedLimitMinutes > 0) onSharedLimitChange(
                             0
                         )
@@ -958,12 +978,18 @@ private fun GroupConfigStep(
                 ) { Text("−5m") }
 
                 FilledTonalButton(
-                    onClick = { onSharedLimitChange(sharedLimitMinutes + 5) },
+                    onClick = {
+                        haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.TextHandleMove)
+                        onSharedLimitChange(sharedLimitMinutes + 5)
+                    },
                     shape = RoundedCornerShape(12.dp)
                 ) { Text("+5m") }
 
                 FilledTonalButton(
-                    onClick = { onSharedLimitChange(sharedLimitMinutes + 15) },
+                    onClick = {
+                        haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.TextHandleMove)
+                        onSharedLimitChange(sharedLimitMinutes + 15)
+                    },
                     shape = RoundedCornerShape(12.dp)
                 ) { Text("+15m") }
             }
@@ -976,7 +1002,10 @@ private fun GroupConfigStep(
                 listOf(0, 5, 15, 30, 45, 60, 90).forEach { preset ->
                     FilterChip(
                         selected = sharedLimitMinutes == preset,
-                        onClick = { onSharedLimitChange(preset) },
+                        onClick = {
+                            haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.TextHandleMove)
+                            onSharedLimitChange(preset)
+                        },
                         label = { Text(formatLimitTime(preset)) },
                         leadingIcon = if (sharedLimitMinutes == preset) {
                             {
@@ -1023,6 +1052,7 @@ private fun AppSelectStep(
     onNext: () -> Unit
 ) {
     val context = LocalContext.current
+    val haptic = dev.pranav.reef.util.rememberGatedHapticFeedback()
     Row(
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(4.dp)
@@ -1073,7 +1103,10 @@ private fun AppSelectStep(
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .clickable { onTogglePackage(packageName) }
+                        .clickable {
+                            haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.TextHandleMove)
+                            onTogglePackage(packageName)
+                        }
                         .padding(horizontal = 8.dp, vertical = 8.dp),
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(12.dp)
@@ -1103,7 +1136,10 @@ private fun AppSelectStep(
 
                     Checkbox(
                         checked = packageName in selectedPackages,
-                        onCheckedChange = { onTogglePackage(packageName) }
+                        onCheckedChange = {
+                            haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.TextHandleMove)
+                            onTogglePackage(packageName)
+                        }
                     )
                 }
             }
@@ -1424,6 +1460,7 @@ private fun LimitPickerDialog(
     val presets = listOf(0, 5, 15, 30, 45, 60, 90)
     var minutes by remember { mutableIntStateOf(initialMinutes) }
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    val haptic = dev.pranav.reef.util.rememberGatedHapticFeedback()
 
     ModalBottomSheet(
         onDismissRequest = onDismiss,
@@ -1547,6 +1584,7 @@ private fun LimitPickerDialog(
                     .forEach { (delta, label) ->
                         FilledTonalButton(
                             onClick = {
+                                haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.TextHandleMove)
                                 minutes = when {
                                     delta < 0 -> maxOf(0, minutes + delta)
                                     else -> minutes + delta
@@ -1568,7 +1606,10 @@ private fun LimitPickerDialog(
                 presets.forEach { preset ->
                     FilterChip(
                         selected = minutes == preset,
-                        onClick = { minutes = preset },
+                        onClick = {
+                            haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.TextHandleMove)
+                            minutes = preset
+                        },
                         label = {
                             Text(
                                 text = formatLimitTime(preset)

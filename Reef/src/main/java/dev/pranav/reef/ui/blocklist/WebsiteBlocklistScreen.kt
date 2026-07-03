@@ -273,6 +273,7 @@ fun WebsiteBlocklistScreen(onBackPressed: () -> Unit) {
         var newDomain by remember { mutableStateOf(editingDomain ?: "") }
         var isLimit by remember { mutableStateOf(editingIsLimit) }
         var limitMinutes by remember { mutableIntStateOf(if (editingIsLimit) editingHours * 60 + editingMinutes else 30) }
+        val sheetHaptic = dev.pranav.reef.util.rememberGatedHapticFeedback()
 
         ModalBottomSheet(
             onDismissRequest = { showAddDialog = false },
@@ -317,7 +318,10 @@ fun WebsiteBlocklistScreen(onBackPressed: () -> Unit) {
                 ) {
                     ToggleButton(
                         checked = !isLimit,
-                        onCheckedChange = { isLimit = false },
+                        onCheckedChange = {
+                            sheetHaptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.TextHandleMove)
+                            isLimit = false
+                        },
                         shapes = ButtonGroupDefaults.connectedLeadingButtonShapes(),
                         modifier = Modifier.weight(1f)
                     ) {
@@ -325,7 +329,10 @@ fun WebsiteBlocklistScreen(onBackPressed: () -> Unit) {
                     }
                     ToggleButton(
                         checked = isLimit,
-                        onCheckedChange = { isLimit = true },
+                        onCheckedChange = {
+                            sheetHaptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.TextHandleMove)
+                            isLimit = true
+                        },
                         shapes = ButtonGroupDefaults.connectedTrailingButtonShapes(),
                         modifier = Modifier.weight(1f)
                     ) {
@@ -376,6 +383,7 @@ fun WebsiteBlocklistScreen(onBackPressed: () -> Unit) {
                         ) {
                             FilledTonalButton(
                                 onClick = {
+                                    sheetHaptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.TextHandleMove)
                                     if (limitMinutes >= 15) limitMinutes -= 15 else limitMinutes = 0
                                 },
                                 enabled = limitMinutes > 0,
@@ -384,6 +392,7 @@ fun WebsiteBlocklistScreen(onBackPressed: () -> Unit) {
 
                             FilledTonalButton(
                                 onClick = {
+                                    sheetHaptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.TextHandleMove)
                                     if (limitMinutes >= 1) limitMinutes -= 1 else limitMinutes = 0
                                 },
                                 enabled = limitMinutes > 0,
@@ -391,12 +400,18 @@ fun WebsiteBlocklistScreen(onBackPressed: () -> Unit) {
                             ) { Text("−1m") }
 
                             FilledTonalButton(
-                                onClick = { limitMinutes += 1 },
+                                onClick = {
+                                    sheetHaptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.TextHandleMove)
+                                    limitMinutes += 1
+                                },
                                 shape = RoundedCornerShape(12.dp)
                             ) { Text("+1m") }
 
                             FilledTonalButton(
-                                onClick = { limitMinutes += 15 },
+                                onClick = {
+                                    sheetHaptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.TextHandleMove)
+                                    limitMinutes += 15
+                                },
                                 shape = RoundedCornerShape(12.dp)
                             ) { Text("+15m") }
                         }
@@ -409,7 +424,10 @@ fun WebsiteBlocklistScreen(onBackPressed: () -> Unit) {
                             listOf(5, 10, 15, 20, 30, 45, 60, 90, 120).forEach { preset ->
                                 FilterChip(
                                     selected = limitMinutes == preset,
-                                    onClick = { limitMinutes = preset },
+                                    onClick = {
+                                        sheetHaptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.TextHandleMove)
+                                        limitMinutes = preset
+                                    },
                                     label = {
                                         val h = if (preset >= 60) "${preset / 60}h " else ""
                                         val m =

@@ -190,6 +190,7 @@ private fun RoutineItem(
     onToggle: (Boolean) -> Unit,
     context: android.content.Context
 ) {
+    val haptic = dev.pranav.reef.util.rememberGatedHapticFeedback()
     Card(
         onClick = onClick,
         modifier = Modifier.fillMaxWidth(),
@@ -250,7 +251,10 @@ private fun RoutineItem(
 
             Switch(
                 checked = routine.isEnabled,
-                onCheckedChange = onToggle
+                onCheckedChange = {
+                    haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.TextHandleMove)
+                    onToggle(it)
+                }
             )
         }
     }

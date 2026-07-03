@@ -201,6 +201,7 @@ fun RangeButtonGroup(
 ) {
     val options =
         listOf(stringResource(R.string.today), stringResource(R.string.last_7_days_option))
+    val haptic = dev.pranav.reef.util.rememberGatedHapticFeedback()
 
     val selectedIndex = if (selectedRange == UsageRange.TODAY) 0 else 1
 
@@ -212,6 +213,7 @@ fun RangeButtonGroup(
                 checked = selectedIndex == index,
                 onCheckedChange = {
                     if (selectedIndex != index) {
+                        haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.TextHandleMove)
                         onSelectionChange(if (index == 0) UsageRange.TODAY else UsageRange.LAST_7_DAYS)
                     }
                 },

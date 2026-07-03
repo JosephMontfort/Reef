@@ -214,6 +214,11 @@ fun WhitelistItem(
     enabled: Boolean = true,
     onToggle: () -> Unit
 ) {
+    val haptic = dev.pranav.reef.util.rememberGatedHapticFeedback()
+    val gatedOnToggle: () -> Unit = {
+        haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.TextHandleMove)
+        onToggle()
+    }
     val shape = when {
         listSize == 1 -> RoundedCornerShape(24.dp)
         index == 0 -> RoundedCornerShape(
@@ -255,7 +260,7 @@ fun WhitelistItem(
         ) {
             ListItem(
                 modifier = Modifier
-                    .clickable(enabled = enabled, onClick = onToggle)
+                    .clickable(enabled = enabled, onClick = gatedOnToggle)
                     .padding(4.dp),
                 headlineContent = {
                     Text(
@@ -274,7 +279,7 @@ fun WhitelistItem(
                 trailingContent = {
                     Checkbox(
                         checked = app.isWhitelisted,
-                        onCheckedChange = { if (enabled) onToggle() },
+                        onCheckedChange = { if (enabled) gatedOnToggle() },
                         enabled = enabled
                     )
                 },

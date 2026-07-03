@@ -461,5 +461,5 @@
     <string name="done">Done</string>
     <string name="haptics_section">Haptics</string>
     <string name="ui_haptics">UI Haptics</string>
-    <string name="ui_haptics_description">Subtle tick feedback for wheel pickers, buttons, and toggles</string>
+    <string name="ui_haptics_description">Tactile feedback for wheel pickers, buttons, toggles, and tab navigation</string>
 </resources>
