@@ -36,9 +36,11 @@ fun MainSettingsContent(
     onSoundPicker: () -> Unit
 ) {
     val context = LocalContext.current
+    val haptic = dev.pranav.reef.util.rememberGatedHapticFeedback()
     var enableDND by remember { mutableStateOf(prefs.getBoolean("enable_dnd", false)) }
     var soundEnabled by remember { mutableStateOf(prefs.getBoolean("pomodoro_sound_enabled", true)) }
     var vibrationEnabled by remember { mutableStateOf(prefs.getBoolean("pomodoro_vibration_enabled", true)) }
+    var uiHapticsEnabled by remember { mutableStateOf(dev.pranav.reef.util.HapticSettings.isEnabled) }
 
     val menuItems = listOf(
         SettingsMenuItem(
@@ -64,6 +66,7 @@ fun MainSettingsContent(
                 ListItem(
                     modifier = Modifier
                         .clickable {
+                            haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.TextHandleMove)
                             enableDND = !enableDND
                             prefs.edit { putBoolean("enable_dnd", enableDND) }
                         }
@@ -79,7 +82,56 @@ fun MainSettingsContent(
                     trailingContent = {
                         Switch(
                             checked = enableDND,
-                            onCheckedChange = { enableDND = it; prefs.edit { putBoolean("enable_dnd", it) } }
+                            onCheckedChange = {
+                                haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.TextHandleMove)
+                                enableDND = it; prefs.edit { putBoolean("enable_dnd", it) }
+                            }
+                        )
+                    },
+                    colors = ListItemDefaults.colors(containerColor = Color.Transparent)
+                )
+            }
+        }
+
+        item { HorizontalDivider(modifier = Modifier.padding(vertical = 12.dp, horizontal = 8.dp)) }
+
+        // ── UI Haptics master switch ────────────────────────────────────────
+        item {
+            Text(
+                text = stringResource(R.string.haptics_section),
+                style = MaterialTheme.typography.titleSmall,
+                fontWeight = FontWeight.SemiBold,
+                color = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.padding(start = 4.dp, bottom = 6.dp)
+            )
+        }
+        item {
+            SettingsCard(index = 0, listSize = 1) {
+                val confirmHaptic = androidx.compose.ui.platform.LocalHapticFeedback.current
+                ListItem(
+                    modifier = Modifier
+                        .clickable {
+                            uiHapticsEnabled = !uiHapticsEnabled
+                            dev.pranav.reef.util.HapticSettings.setEnabled(uiHapticsEnabled)
+                            confirmHaptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.LongPress)
+                        }
+                        .padding(4.dp),
+                    headlineContent = {
+                        Text(stringResource(R.string.ui_haptics),
+                            style = MaterialTheme.typography.titleMedium)
+                    },
+                    supportingContent = {
+                        Text(stringResource(R.string.ui_haptics_description),
+                            style = MaterialTheme.typography.bodySmall)
+                    },
+                    trailingContent = {
+                        Switch(
+                            checked = uiHapticsEnabled,
+                            onCheckedChange = {
+                                uiHapticsEnabled = it
+                                dev.pranav.reef.util.HapticSettings.setEnabled(it)
+                                confirmHaptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.LongPress)
+                            }
                         )
                     },
                     colors = ListItemDefaults.colors(containerColor = Color.Transparent)
@@ -105,6 +157,7 @@ fun MainSettingsContent(
                 ListItem(
                     modifier = Modifier
                         .clickable {
+                            haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.TextHandleMove)
                             soundEnabled = !soundEnabled
                             prefs.edit { putBoolean("pomodoro_sound_enabled", soundEnabled) }
                         }
@@ -120,7 +173,10 @@ fun MainSettingsContent(
                     trailingContent = {
                         Switch(
                             checked = soundEnabled,
-                            onCheckedChange = { soundEnabled = it; prefs.edit { putBoolean("pomodoro_sound_enabled", it) } }
+                            onCheckedChange = {
+                                haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.TextHandleMove)
+                                soundEnabled = it; prefs.edit { putBoolean("pomodoro_sound_enabled", it) }
+                            }
                         )
                     },
                     colors = ListItemDefaults.colors(containerColor = Color.Transparent)
@@ -174,6 +230,7 @@ fun MainSettingsContent(
                 ListItem(
                     modifier = Modifier
                         .clickable {
+                            haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.TextHandleMove)
                             vibrationEnabled = !vibrationEnabled
                             prefs.edit { putBoolean("pomodoro_vibration_enabled", vibrationEnabled) }
                         }
@@ -189,7 +246,10 @@ fun MainSettingsContent(
                     trailingContent = {
                         Switch(
                             checked = vibrationEnabled,
-                            onCheckedChange = { vibrationEnabled = it; prefs.edit { putBoolean("pomodoro_vibration_enabled", it) } }
+                            onCheckedChange = {
+                                haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.TextHandleMove)
+                                vibrationEnabled = it; prefs.edit { putBoolean("pomodoro_vibration_enabled", it) }
+                            }
                         )
                     },
                     colors = ListItemDefaults.colors(containerColor = Color.Transparent)

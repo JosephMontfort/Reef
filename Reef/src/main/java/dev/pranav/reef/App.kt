@@ -29,6 +29,7 @@ class App : Application(), Configuration.Provider {
         setupSafePreferences()
 
         AppLimits.init(this)
+        dev.pranav.reef.util.HapticSettings.init()
         Whitelist.init(this)
         FocusStats.init(this)
         FocusStats.initCheckpoint(this)

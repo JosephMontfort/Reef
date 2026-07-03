@@ -459,4 +459,7 @@
     <string name="routine_end_time_before_start_error">End time must be after start time</string>
     <string name="app_will_be_blocked_in_seconds">%1$s will be blocked in %2$d seconds</string>
     <string name="done">Done</string>
+    <string name="haptics_section">Haptics</string>
+    <string name="ui_haptics">UI Haptics</string>
+    <string name="ui_haptics_description">Subtle tick feedback for wheel pickers, buttons, and toggles</string>
 </resources>

@@ -1,6 +1,9 @@
 package dev.pranav.reef.timer
 
 import android.content.Intent
+import androidx.compose.runtime.snapshotFlow
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import kotlinx.coroutines.launch
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.core.animateFloatAsState
@@ -65,7 +68,6 @@ import dev.pranav.reef.util.formatTime
 import dev.pranav.reef.util.WatchdogManager
 import dev.pranav.reef.util.WhitelistAppCache
 import dev.pranav.reef.util.prefs
-import kotlinx.coroutines.launch
 
 sealed interface TimerConfig {
     data class Simple(val minutes: Int, val strictMode: Boolean): TimerConfig
@@ -288,6 +290,7 @@ private fun SettingsToggleRow(
     checked: Boolean,
     onCheckedChange: (Boolean) -> Unit
 ) {
+    val haptic = dev.pranav.reef.util.rememberGatedHapticFeedback()
     Surface(
         color = MaterialTheme.colorScheme.surfaceContainer,
         shape = MaterialTheme.shapes.small,
@@ -314,7 +317,13 @@ private fun SettingsToggleRow(
                         color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             }
-            Switch(checked = checked, onCheckedChange = onCheckedChange)
+            Switch(
+                checked = checked,
+                onCheckedChange = {
+                    haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                    onCheckedChange(it)
+                }
+            )
         }
     }
 }
@@ -346,17 +355,22 @@ fun WheelPicker(
     itemHeight: androidx.compose.ui.unit.Dp = 44.dp,
     visibleItemCount: Int = 3,
     pickerWidth: androidx.compose.ui.unit.Dp = 80.dp,
+    isCircular: Boolean = true,
     selectedTextStyle: androidx.compose.ui.text.TextStyle? = null,
     label: @Composable (Int) -> String = { it.toString().padStart(2, '0') }
 ) {
     val rangeSize = range.last - range.first + 1
-    // Large virtual span, must be a multiple of rangeSize so modulo mapping
-    // stays aligned; ~2000 cycles is effectively infinite for a UI gesture.
+    // Large virtual span for circular mode, must be a multiple of rangeSize
+    // so modulo mapping stays aligned; ~2000 cycles is effectively infinite
+    // for a UI gesture. Non-circular mode uses the real range directly with
+    // no wraparound.
     val virtualCycles = 2000
-    val virtualCount = rangeSize * virtualCycles
-    val middleCycleStart = (virtualCycles / 2) * rangeSize
+    val virtualCount = if (isCircular) rangeSize * virtualCycles else rangeSize
+    val middleCycleStart = if (isCircular) (virtualCycles / 2) * rangeSize else 0
 
-    fun realValue(virtualIndex: Int): Int = range.first + (virtualIndex.mod(rangeSize))
+    fun realValue(virtualIndex: Int): Int =
+        if (isCircular) range.first + (virtualIndex.mod(rangeSize))
+        else (range.first + virtualIndex).coerceIn(range.first, range.last)
 
     val initialVirtualIndex = middleCycleStart + (value - range.first)
     val listState = rememberLazyListState(initialFirstVisibleItemIndex = initialVirtualIndex)
@@ -364,31 +378,45 @@ fun WheelPicker(
     val density = LocalDensity.current
     val itemHeightPx = with(density) { itemHeight.toPx() }
     val coroutineScope = rememberCoroutineScope()
+    val haptic = dev.pranav.reef.util.rememberGatedHapticFeedback()
+
+    fun centerVirtualIndex(): Int = listState.firstVisibleItemIndex +
+        if (listState.firstVisibleItemScrollOffset > itemHeightPx / 2) 1 else 0
+
+    // Per-tick haptic: fire once for every distinct centered item passed
+    // while actively scrolling — the "click click click" Xiaomi-clock feel.
+    var lastHapticVirtualIndex by remember { mutableIntStateOf(initialVirtualIndex) }
+    LaunchedEffect(listState) {
+        snapshotFlow { centerVirtualIndex() }
+            .collect { centerIndex ->
+                if (centerIndex != lastHapticVirtualIndex) {
+                    lastHapticVirtualIndex = centerIndex
+                    haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                }
+            }
+    }
 
     // Report the centered real value back to the caller once scrolling settles
     LaunchedEffect(listState.isScrollInProgress) {
         if (!listState.isScrollInProgress) {
-            val centerVirtualIndex = listState.firstVisibleItemIndex +
-                if (listState.firstVisibleItemScrollOffset > itemHeightPx / 2) 1 else 0
-            val newValue = realValue(centerVirtualIndex)
+            val newValue = realValue(centerVirtualIndex())
             if (newValue != value) onValueChange(newValue)
         }
     }
 
-    // If the external value changes (e.g. from +/- buttons), scroll to the
-    // nearest virtual index representing that value — never jump across the
-    // whole virtual range, always move to the closer of the two directions.
+    // If the external value changes (e.g. from +/- buttons), scroll to match.
+    // Circular mode always takes the shorter path (forward vs backward);
+    // non-circular mode scrolls directly since there's only one path.
     LaunchedEffect(value) {
-        val centerVirtualIndex = listState.firstVisibleItemIndex +
-            if (listState.firstVisibleItemScrollOffset > itemHeightPx / 2) 1 else 0
-        val currentReal = realValue(centerVirtualIndex)
+        val currentReal = realValue(centerVirtualIndex())
         if (currentReal != value) {
-            val forwardDelta = (value - currentReal).mod(rangeSize)
-            val backwardDelta = (currentReal - value).mod(rangeSize)
-            val targetVirtualIndex = if (forwardDelta <= backwardDelta) {
-                centerVirtualIndex + forwardDelta
+            val targetVirtualIndex = if (isCircular) {
+                val forwardDelta = (value - currentReal).mod(rangeSize)
+                val backwardDelta = (currentReal - value).mod(rangeSize)
+                if (forwardDelta <= backwardDelta) centerVirtualIndex() + forwardDelta
+                else centerVirtualIndex() - backwardDelta
             } else {
-                centerVirtualIndex - backwardDelta
+                value - range.first
             }
             coroutineScope.launch {
                 listState.animateScrollToItem(targetVirtualIndex)
@@ -406,12 +434,6 @@ fun WheelPicker(
                 available: androidx.compose.ui.geometry.Offset,
                 source: androidx.compose.ui.input.nestedscroll.NestedScrollSource
             ): androidx.compose.ui.geometry.Offset {
-                // Claim the full vertical delta for ourselves; LazyColumn
-                // underneath still receives and processes it normally since
-                // we return Offset.Zero as "consumed by us" only for the
-                // purpose of stopping propagation to ancestors — Compose's
-                // nested scroll dispatches Pre to children-of-self first,
-                // so simply not forwarding upward here is enough.
                 return androidx.compose.ui.geometry.Offset.Zero
             }
         }
@@ -441,16 +463,13 @@ fun WheelPicker(
                 state = listState,
                 flingBehavior = flingBehavior,
                 contentPadding = PaddingValues(vertical = itemHeight * (visibleItemCount / 2)),
-                modifier = Modifier.fillMaxSize()
+                modifier = Modifier.fillMaxSize(),
+                userScrollEnabled = true
             ) {
                 items(count = virtualCount, key = { it }) { virtualIndex ->
                     val realItem = realValue(virtualIndex)
                     val isSelected by remember {
-                        derivedStateOf {
-                            val centerVirtualIndex = listState.firstVisibleItemIndex +
-                                if (listState.firstVisibleItemScrollOffset > itemHeightPx / 2) 1 else 0
-                            centerVirtualIndex == virtualIndex
-                        }
+                        derivedStateOf { centerVirtualIndex() == virtualIndex }
                     }
                     Box(
                         modifier = Modifier
@@ -479,8 +498,12 @@ fun FocusStartButton(
     enabled: Boolean = true,
     onClick: () -> Unit
 ) {
+    val haptic = dev.pranav.reef.util.rememberGatedHapticFeedback()
     Button(
-        onClick = onClick,
+        onClick = {
+            haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.LongPress)
+            onClick()
+        },
         enabled = enabled,
         modifier = Modifier
             .fillMaxWidth(0.88f)
@@ -519,6 +542,7 @@ fun SimpleFocusSetup(onStart: (TimerConfig) -> Unit) {
     var resilienceMode by remember { mutableStateOf(prefs.getBoolean("resilience_mode_enabled", false)) }
     var preventStop by remember { mutableStateOf(prefs.getBoolean("prevent_stop_session", false)) }
     val context = LocalContext.current
+    val haptic = dev.pranav.reef.util.rememberGatedHapticFeedback()
 
     val totalMinutes = hours * 60 + minutes
 
@@ -532,6 +556,7 @@ fun SimpleFocusSetup(onStart: (TimerConfig) -> Unit) {
             SegmentedButton(
                 selected = !isCountUp,
                 onClick = {
+                    haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
                     isCountUp = false
                     prefs.edit().putBoolean("timer_is_count_up", false).apply()
                 },
@@ -542,6 +567,7 @@ fun SimpleFocusSetup(onStart: (TimerConfig) -> Unit) {
             SegmentedButton(
                 selected = isCountUp,
                 onClick = {
+                    haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
                     isCountUp = true
                     isStrictMode = false
                     prefs.edit().putBoolean("timer_is_count_up", true).apply()
@@ -566,19 +592,19 @@ fun SimpleFocusSetup(onStart: (TimerConfig) -> Unit) {
                     // Hours column: minus, wheel, plus
                     Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(4.dp)) {
                         FilledTonalIconButton(
-                            onClick = { if (hours < 23) hours++ },
+                            onClick = { haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove); if (hours < 23) hours++ },
                             modifier = Modifier.size(40.dp)
                         ) { Icon(Icons.Rounded.Add, stringResource(R.string.increase_hours), modifier = Modifier.size(18.dp)) }
                         WheelPicker(
                             value = hours,
                             range = 0..23,
                             onValueChange = { hours = it },
-                            itemHeight = 52.dp,
-                            visibleItemCount = 5,
+                            itemHeight = 44.dp,
+                            visibleItemCount = 3,
                             selectedTextStyle = MaterialTheme.typography.headlineMedium
                         )
                         FilledTonalIconButton(
-                            onClick = { if (hours > 0) hours-- },
+                            onClick = { haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove); if (hours > 0) hours-- },
                             modifier = Modifier.size(40.dp)
                         ) { Icon(Icons.Rounded.Remove, stringResource(R.string.decrease_hours), modifier = Modifier.size(18.dp)) }
                         Text(stringResource(R.string.hours), style = MaterialTheme.typography.labelMedium)
@@ -594,6 +620,7 @@ fun SimpleFocusSetup(onStart: (TimerConfig) -> Unit) {
                     Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(4.dp)) {
                         FilledTonalIconButton(
                             onClick = {
+                                haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
                                 if (minutes < 59) minutes++ else if (hours < 23) { hours++; minutes = 0 }
                             },
                             modifier = Modifier.size(40.dp)
@@ -602,11 +629,12 @@ fun SimpleFocusSetup(onStart: (TimerConfig) -> Unit) {
                             value = minutes,
                             range = 0..59,
                             onValueChange = { minutes = it },
-                            itemHeight = 52.dp,
-                            visibleItemCount = 5
+                            itemHeight = 44.dp,
+                            visibleItemCount = 3
                         )
                         FilledTonalIconButton(
                             onClick = {
+                                haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
                                 if (minutes > 0) minutes-- else if (hours > 0) { hours--; minutes = 59 }
                             },
                             modifier = Modifier.size(40.dp)
@@ -639,6 +667,7 @@ fun SimpleFocusSetup(onStart: (TimerConfig) -> Unit) {
                 ) {
                     FilledTonalIconButton(
                         onClick = {
+                            haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
                             if (ratio > 1) { ratio--; prefs.edit().putInt("timer_count_up_ratio", ratio).apply() }
                         },
                         modifier = Modifier.size(40.dp)
@@ -650,12 +679,14 @@ fun SimpleFocusSetup(onStart: (TimerConfig) -> Unit) {
                             ratio = it
                             prefs.edit().putInt("timer_count_up_ratio", ratio).apply()
                         },
-                        itemHeight = 52.dp,
-                        visibleItemCount = 5,
+                        itemHeight = 44.dp,
+                        visibleItemCount = 3,
+                        isCircular = false,
                         label = { stringResource(R.string.ratio_format, it) }
                     )
                     FilledTonalIconButton(
                         onClick = {
+                            haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
                             if (ratio < 10) { ratio++; prefs.edit().putInt("timer_count_up_ratio", ratio).apply() }
                         },
                         modifier = Modifier.size(40.dp)
@@ -1313,6 +1344,7 @@ fun RunningTimerActions(
         )
     }
 
+    val gatedHaptic = dev.pranav.reef.util.rememberGatedHapticFeedback()
     val haptic = androidx.compose.ui.platform.LocalHapticFeedback.current
     Column(modifier = modifier, verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Row(
@@ -1324,7 +1356,7 @@ fun RunningTimerActions(
                 IconToggleButton(
                     checked = isPaused,
                     onCheckedChange = {
-                        haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.LongPress)
+                        gatedHaptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.LongPress)
                         if (isPaused) onResume() else onPause()
                     },
                     shapes = IconButtonDefaults.toggleableShapes(

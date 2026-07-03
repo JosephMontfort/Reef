@@ -310,7 +310,7 @@ private fun HoldToFocusAnchor(onProgressChanged: (Float) -> Unit, onTrigger: () 
         label = "core_color"
     )
 
-    val haptic = androidx.compose.ui.platform.LocalHapticFeedback.current
+    val haptic = dev.pranav.reef.util.rememberGatedHapticFeedback()
 
     LaunchedEffect(isPressing) {
         if (isPressing) {
