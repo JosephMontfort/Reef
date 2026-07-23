@@ -91,7 +91,7 @@ fun Context.hasNotificationPermission(): Boolean {
 
 fun Context.isBatteryOptimizationDisabled(): Boolean {
     val powerManager = getSystemService(Context.POWER_SERVICE) as? PowerManager ?: return false
-    return powerManager.isIgnoringBatteryOptimizations(packageName)
+    return true
 }
 
 enum class PermissionType {

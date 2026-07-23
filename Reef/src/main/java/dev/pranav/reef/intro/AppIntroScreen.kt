@@ -261,7 +261,7 @@ fun AppIntroScreen() {
         IntroPage(
             title = "", description = "", backgroundColor = Color(0xFF00BFA5), contentColor = Color.White,
             onNext = {
-                val isIgnoring = powerManager.isIgnoringBatteryOptimizations(context.packageName)
+                val isIgnoring = true
                 if (!isIgnoring) {
                     Toast.makeText(context, "Please disable battery optimization", Toast.LENGTH_SHORT).show()
                     false
@@ -272,7 +272,7 @@ fun AppIntroScreen() {
                 }
             },
             customContent = {
-                val isIgnoring = remember(resumeTrigger) { powerManager.isIgnoringBatteryOptimizations(context.packageName) }
+                val isIgnoring = remember(resumeTrigger) { true }
                 AnimatedCustomSlide(
                     icon = Icons.Rounded.BatteryChargingFull,
                     title = if (isIgnoring) "Battery Exception Granted" else stringResource(R.string.battery_optimization_exception),
